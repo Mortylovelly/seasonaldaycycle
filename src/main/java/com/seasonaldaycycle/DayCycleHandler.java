@@ -21,11 +21,13 @@ public class DayCycleHandler {
         if (event.phase != TickEvent.Phase.END) return;
         if (!(event.level instanceof ServerLevel level)) return;
         if (level.dimension() != net.minecraft.world.level.Level.OVERWORLD) return;
+
+        // Если другой мод выключил doDaylightCycle — не вмешиваемся
         if (!level.getGameRules().getBoolean(GameRules.RULE_DAYLIGHT)) return;
 
         long currentTime = level.getDayTime();
 
-        // Детекция внешнего изменения (/time set, другой мод)
+        // Детекция /time set или другого мода изменившего время резко
         if (lastKnownTime >= 0) {
             long diff = Math.abs(currentTime - lastKnownTime);
             if (diff > EXTERNAL_CHANGE_THRESHOLD && diff < VANILLA_CYCLE - EXTERNAL_CHANGE_THRESHOLD) {
@@ -43,28 +45,24 @@ public class DayCycleHandler {
         double dayRealTicks   = getRealDayTicks(subSeason);
         double nightRealTicks = getRealNightTicks(subSeason);
 
-        // Ваниль уже добавила +1 этот тик
-        // Нам нужно чтобы за dayRealTicks тиков прошло 12000 игрового времени
-        // Значит за 1 тик нужно: 12000 / dayRealTicks
-        // Ваниль уже дала +1, значит нам нужно добавить: (12000/dayRealTicks) - 1
-        // Если dayRealTicks > 12000 (медленный день) — delta отрицательная, мы вычитаем
-        // Если dayRealTicks < 12000 (быстрый день) — delta положительная, мы добавляем
-
+        // targetRate = сколько игровых тиков нужно за 1 реальный тик
+        // ваниль уже добавила +1, поэтому delta = targetRate - 1
         double targetRate = isDay
             ? (12000.0 / dayRealTicks)
             : (12000.0 / nightRealTicks);
 
-        double delta = targetRate - 1.0;
-        accumulator += delta;
+        accumulator += (targetRate - 1.0);
 
-        // Важно: применяем только когда накопилось целое число
-        // Для медленного дня (delta ~ -0.67): каждые ~1.5 тика вычитаем 1
-        // Это значит: ваниль +1, мы -1 = 0 два раза из трёх, один раз = +1
-        // Итого: 1 тик из 3 реальных = 1 игровой тик — правильно для 3x замедления
-        if (Math.abs(accumulator) >= 1.0) {
-            long toAdd = (long) accumulator;
-            accumulator -= toAdd;
+        // Math.floor всегда округляет ВНИЗ (к минус бесконечности)
+        // в отличие от (long) который округляет к нулю
+        // Это означает:
+        //   +0.9 -> floor -> 0  (ждём пока не накопится 1.0)
+        //   -0.1 -> floor -> -1 (вычитаем тик, солнце не прыгает назад больше чем на 1)
+        // Накопитель всегда остаётся в диапазоне [0, 1)
+        long toAdd = (long) Math.floor(accumulator);
+        accumulator -= toAdd;
 
+        if (toAdd != 0) {
             long newTime = currentTime + toAdd;
             if (newTime < 0) newTime = ((newTime % VANILLA_CYCLE) + VANILLA_CYCLE) % VANILLA_CYCLE;
             level.setDayTime(newTime);
