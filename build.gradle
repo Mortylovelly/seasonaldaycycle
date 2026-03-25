@@ -36,8 +36,8 @@ repositories {
 dependencies {
     minecraft 'net.minecraftforge:forge:1.20.1-47.3.0'
 
-    // Serene Seasons as compile dependency (API only)
-    compileOnly fg.deobf('com.blameJared.sereneseasons:SereneSeasons-forge-1.20.1:9.1.0.2')
+    // SereneSeasons API - compileOnly без fg.deobf, так как jar уже remapped
+    compileOnly 'com.blameJared.sereneseasons:SereneSeasons-forge-1.20.1:9.1.0.2'
 }
 
 jar {
