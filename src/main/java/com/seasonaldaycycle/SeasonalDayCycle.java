@@ -13,6 +13,9 @@ public class SeasonalDayCycle {
     public static final Logger LOGGER = LogManager.getLogger();
 
     public SeasonalDayCycle() {
+        // Регистрация конфига здесь — не в static блоке
+        ModConfig.register();
+
         FMLJavaModLoadingContext.get().getModEventBus()
             .addListener(ModConfig::onLoad);
 
