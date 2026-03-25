@@ -11,17 +11,33 @@ public class DayCycleHandler {
 
     private double accumulator = 0.0;
     private long lastKnownTime = -1;
+    private boolean wasManaged = false;
 
-    private static final long VANILLA_DAY_END          = 12000L;
-    private static final long VANILLA_CYCLE            = 24000L;
-    private static final long EXTERNAL_CHANGE_THRESHOLD = 200L;
+    private static final long VANILLA_DAY_END            = 12000L;
+    private static final long VANILLA_CYCLE              = 24000L;
+    private static final long EXTERNAL_CHANGE_THRESHOLD  = 200L;
 
     @SubscribeEvent
     public void onServerTick(TickEvent.LevelTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
         if (!(event.level instanceof ServerLevel level)) return;
         if (level.dimension() != net.minecraft.world.level.Level.OVERWORLD) return;
-        if (!level.getGameRules().getBoolean(GameRules.RULE_DAYLIGHT)) return;
+
+        // Если gamerule выключен кем-то другим — не вмешиваемся
+        // но восстанавливаем его если мы сами выключали
+        boolean gameruleOn = level.getGameRules().getBoolean(GameRules.RULE_DAYLIGHT);
+        if (!gameruleOn) {
+            wasManaged = false;
+            accumulator = 0.0;
+            lastKnownTime = -1;
+            return;
+        }
+
+        // Выключаем ванильный тик времени — теперь МЫ двигаем время
+        // setBoolean каждый тик дёшево, Forge это делает внутри
+        level.getGameRules().getRule(GameRules.RULE_DAYLIGHT)
+            .set(false, level.getServer());
+        wasManaged = true;
 
         long currentTime = level.getDayTime();
 
@@ -43,39 +59,26 @@ public class DayCycleHandler {
         double dayRealTicks   = getRealDayTicks(subSeason);
         double nightRealTicks = getRealNightTicks(subSeason);
 
+        // Теперь ваниль НЕ добавляет +1, мы двигаем время полностью сами
+        // targetRate = сколько игровых тиков добавить за 1 реальный тик
         double targetRate = isDay
             ? (12000.0 / dayRealTicks)
             : (12000.0 / nightRealTicks);
 
-        // Накапливаем точное дробное значение
-        accumulator += (targetRate - 1.0);
+        accumulator += targetRate;
 
-        // Применяем только целые тики — но накапливаем дробь без потерь
-        // Это единственный источник рывков: если targetRate < 1.0,
-        // мы ВЫЧИТАЕМ тики, и солнце дёргается назад раз в несколько тиков.
-        // Решение: никогда не вычитать больше 1 за тик,
-        // и не добавлять больше 1 за тик — только 0 или 1.
-        // Тогда солнце всегда движется вперёд равномерно.
+        // Берём целую часть и двигаем время только ВПЕРЁД
+        // Никогда не вычитаем — солнце всегда идёт в одну сторону
+        long toAdd = (long) accumulator;
+        accumulator -= toAdd;
 
-        long toAdd;
-        if (accumulator >= 1.0) {
-            // Быстрее ванили — добавляем дополнительный тик когда накопилось
-            toAdd = (long) accumulator;
-            accumulator -= toAdd;
-        } else if (accumulator <= -1.0) {
-            // Медленнее ванили — пропускаем тик (компенсируем ванильный +1)
-            toAdd = (long) accumulator; // отрицательное число
-            accumulator -= toAdd;
+        if (toAdd > 0) {
+            long newTime = currentTime + toAdd;
+            level.setDayTime(newTime);
+            lastKnownTime = newTime;
         } else {
-            // Накапливаем дальше, ничего не меняем этот тик
             lastKnownTime = currentTime;
-            return;
         }
-
-        long newTime = currentTime + toAdd;
-        if (newTime < 0) newTime = ((newTime % VANILLA_CYCLE) + VANILLA_CYCLE) % VANILLA_CYCLE;
-        level.setDayTime(newTime);
-        lastKnownTime = newTime;
     }
 
     public static Season.SubSeason getCurrentSubSeason(ServerLevel level) {
