@@ -26,15 +26,9 @@ minecraft {
     }
 }
 
-repositories {
-    // локальная папка libs
-    flatDir { dirs 'libs' }
-}
-
 dependencies {
     minecraft 'net.minecraftforge:forge:1.20.1-47.3.0'
 
-    // SereneSeasons из локальной папки libs/
     compileOnly fg.deobf(fileTree(dir: 'libs', include: '*.jar'))
 }
 
