@@ -10,15 +10,10 @@ import sereneseasons.api.season.SeasonHelper;
 public class DayCycleHandler {
 
     private double accumulator = 0.0;
-
-    // Последнее известное время — для детекции внешних изменений (/time set, другие моды)
     private long lastKnownTime = -1;
 
-    private static final long VANILLA_DAY_END = 12000L;
-    private static final long VANILLA_CYCLE   = 24000L;
-
-    // Максимальный прыжок времени за один тик который мы считаем "нормальным"
-    // Если прыжок больше — значит кто-то снаружи изменил время
+    private static final long VANILLA_DAY_END          = 12000L;
+    private static final long VANILLA_CYCLE            = 24000L;
     private static final long EXTERNAL_CHANGE_THRESHOLD = 200L;
 
     @SubscribeEvent
@@ -26,22 +21,17 @@ public class DayCycleHandler {
         if (event.phase != TickEvent.Phase.END) return;
         if (!(event.level instanceof ServerLevel level)) return;
         if (level.dimension() != net.minecraft.world.level.Level.OVERWORLD) return;
-
-        // Если gamerule doDaylightCycle выключен другим модом — не вмешиваемся
         if (!level.getGameRules().getBoolean(GameRules.RULE_DAYLIGHT)) return;
 
         long currentTime = level.getDayTime();
 
-        // Детекция внешнего изменения времени (/time set, другой мод, команда оператора)
+        // Детекция внешнего изменения (/time set, другой мод)
         if (lastKnownTime >= 0) {
             long diff = Math.abs(currentTime - lastKnownTime);
-            // Нормальный тик = максимум ~3 тика времени (при очень быстром дне)
-            // Если разница огромная — кто-то снаружи изменил время
             if (diff > EXTERNAL_CHANGE_THRESHOLD && diff < VANILLA_CYCLE - EXTERNAL_CHANGE_THRESHOLD) {
-                // Принимаем новое время, сбрасываем аккумулятор
                 accumulator = 0.0;
                 lastKnownTime = currentTime;
-                return; // пропускаем этот тик, начинаем заново со следующего
+                return;
             }
         }
 
@@ -57,18 +47,35 @@ public class DayCycleHandler {
             ? (12000.0 / dayRealTicks)
             : (12000.0 / nightRealTicks);
 
+        // Накапливаем точное дробное значение
         accumulator += (targetRate - 1.0);
 
-        long toAdd = (long) accumulator;
-        if (toAdd != 0) {
+        // Применяем только целые тики — но накапливаем дробь без потерь
+        // Это единственный источник рывков: если targetRate < 1.0,
+        // мы ВЫЧИТАЕМ тики, и солнце дёргается назад раз в несколько тиков.
+        // Решение: никогда не вычитать больше 1 за тик,
+        // и не добавлять больше 1 за тик — только 0 или 1.
+        // Тогда солнце всегда движется вперёд равномерно.
+
+        long toAdd;
+        if (accumulator >= 1.0) {
+            // Быстрее ванили — добавляем дополнительный тик когда накопилось
+            toAdd = (long) accumulator;
             accumulator -= toAdd;
-            long newTime = currentTime + toAdd;
-            if (newTime < 0) newTime = ((newTime % VANILLA_CYCLE) + VANILLA_CYCLE) % VANILLA_CYCLE;
-            level.setDayTime(newTime);
-            lastKnownTime = newTime;
+        } else if (accumulator <= -1.0) {
+            // Медленнее ванили — пропускаем тик (компенсируем ванильный +1)
+            toAdd = (long) accumulator; // отрицательное число
+            accumulator -= toAdd;
         } else {
+            // Накапливаем дальше, ничего не меняем этот тик
             lastKnownTime = currentTime;
+            return;
         }
+
+        long newTime = currentTime + toAdd;
+        if (newTime < 0) newTime = ((newTime % VANILLA_CYCLE) + VANILLA_CYCLE) % VANILLA_CYCLE;
+        level.setDayTime(newTime);
+        lastKnownTime = newTime;
     }
 
     public static Season.SubSeason getCurrentSubSeason(ServerLevel level) {
