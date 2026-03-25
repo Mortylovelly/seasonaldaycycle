@@ -9,29 +9,38 @@ import sereneseasons.api.season.SeasonHelper;
 
 public class DayCycleHandler {
 
-    private double accumulator = 0.0;
-    private long lastKnownTime = -1;
+    // Дробная часть времени — хранится отдельно как в Better Days
+    private double timeDecimalAccumulator = 0.0;
 
-    private static final long VANILLA_DAY_END            = 12000L;
-    private static final long VANILLA_CYCLE              = 24000L;
-    private static final long EXTERNAL_CHANGE_THRESHOLD  = 200L;
+    private long lastKnownTime = -1;
+    private static final long EXTERNAL_CHANGE_THRESHOLD = 200L;
+    private static final long VANILLA_DAY_END = 12000L;
+    private static final long VANILLA_CYCLE   = 24000L;
 
     @SubscribeEvent
     public void onServerTick(TickEvent.LevelTickEvent event) {
-        if (event.phase != TickEvent.Phase.END) return;
+        // Better Days использует START фазу для vanillaTimeCompensation
+        // и END фазу для своего tickTime — мы делаем то же самое
+
         if (!(event.level instanceof ServerLevel level)) return;
         if (level.dimension() != net.minecraft.world.level.Level.OVERWORLD) return;
-
-        // Если другой мод выключил doDaylightCycle — не вмешиваемся
         if (!level.getGameRules().getBoolean(GameRules.RULE_DAYLIGHT)) return;
+
+        if (event.phase == TickEvent.Phase.START) {
+            // Точно как Better Days: отменяем ванильный +1 который уже был добавлен
+            level.setDayTime(level.getDayTime() - 1);
+            return;
+        }
+
+        // Дальше — END фаза
 
         long currentTime = level.getDayTime();
 
-        // Детекция /time set или другого мода изменившего время резко
+        // Детекция /time set или другого мода
         if (lastKnownTime >= 0) {
             long diff = Math.abs(currentTime - lastKnownTime);
             if (diff > EXTERNAL_CHANGE_THRESHOLD && diff < VANILLA_CYCLE - EXTERNAL_CHANGE_THRESHOLD) {
-                accumulator = 0.0;
+                timeDecimalAccumulator = 0.0;
                 lastKnownTime = currentTime;
                 return;
             }
@@ -45,26 +54,22 @@ public class DayCycleHandler {
         double dayRealTicks   = getRealDayTicks(subSeason);
         double nightRealTicks = getRealNightTicks(subSeason);
 
-        // targetRate = сколько игровых тиков нужно за 1 реальный тик
-        // ваниль уже добавила +1, поэтому delta = targetRate - 1
-        double targetRate = isDay
+        // speed = сколько игровых тиков за 1 реальный тик
+        // vanilla = 1.0, медленнее = меньше 1.0, быстрее = больше 1.0
+        double speed = isDay
             ? (12000.0 / dayRealTicks)
             : (12000.0 / nightRealTicks);
 
-        accumulator += (targetRate - 1.0);
+        // Добавляем speed к дробному накопителю (точно как Better Days)
+        timeDecimalAccumulator += speed;
 
-        // Math.floor всегда округляет ВНИЗ (к минус бесконечности)
-        // в отличие от (long) который округляет к нулю
-        // Это означает:
-        //   +0.9 -> floor -> 0  (ждём пока не накопится 1.0)
-        //   -0.1 -> floor -> -1 (вычитаем тик, солнце не прыгает назад больше чем на 1)
-        // Накопитель всегда остаётся в диапазоне [0, 1)
-        long toAdd = (long) Math.floor(accumulator);
-        accumulator -= toAdd;
+        // Берём целую часть — это сколько тиков добавить
+        long toAdd = (long) timeDecimalAccumulator;
+        timeDecimalAccumulator -= toAdd;
 
-        if (toAdd != 0) {
+        // Двигаем время только вперёд
+        if (toAdd > 0) {
             long newTime = currentTime + toAdd;
-            if (newTime < 0) newTime = ((newTime % VANILLA_CYCLE) + VANILLA_CYCLE) % VANILLA_CYCLE;
             level.setDayTime(newTime);
             lastKnownTime = newTime;
         } else {
