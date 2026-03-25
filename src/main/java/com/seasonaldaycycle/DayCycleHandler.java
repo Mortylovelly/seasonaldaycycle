@@ -1,6 +1,7 @@
 package com.seasonaldaycycle;
 
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.GameRules;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import sereneseasons.api.season.Season;
@@ -10,8 +11,15 @@ public class DayCycleHandler {
 
     private double accumulator = 0.0;
 
+    // Последнее известное время — для детекции внешних изменений (/time set, другие моды)
+    private long lastKnownTime = -1;
+
     private static final long VANILLA_DAY_END = 12000L;
     private static final long VANILLA_CYCLE   = 24000L;
+
+    // Максимальный прыжок времени за один тик который мы считаем "нормальным"
+    // Если прыжок больше — значит кто-то снаружи изменил время
+    private static final long EXTERNAL_CHANGE_THRESHOLD = 200L;
 
     @SubscribeEvent
     public void onServerTick(TickEvent.LevelTickEvent event) {
@@ -19,7 +27,25 @@ public class DayCycleHandler {
         if (!(event.level instanceof ServerLevel level)) return;
         if (level.dimension() != net.minecraft.world.level.Level.OVERWORLD) return;
 
-        long timeInDay = level.getDayTime() % VANILLA_CYCLE;
+        // Если gamerule doDaylightCycle выключен другим модом — не вмешиваемся
+        if (!level.getGameRules().getBoolean(GameRules.RULE_DAYLIGHT)) return;
+
+        long currentTime = level.getDayTime();
+
+        // Детекция внешнего изменения времени (/time set, другой мод, команда оператора)
+        if (lastKnownTime >= 0) {
+            long diff = Math.abs(currentTime - lastKnownTime);
+            // Нормальный тик = максимум ~3 тика времени (при очень быстром дне)
+            // Если разница огромная — кто-то снаружи изменил время
+            if (diff > EXTERNAL_CHANGE_THRESHOLD && diff < VANILLA_CYCLE - EXTERNAL_CHANGE_THRESHOLD) {
+                // Принимаем новое время, сбрасываем аккумулятор
+                accumulator = 0.0;
+                lastKnownTime = currentTime;
+                return; // пропускаем этот тик, начинаем заново со следующего
+            }
+        }
+
+        long timeInDay = currentTime % VANILLA_CYCLE;
         boolean isDay  = timeInDay < VANILLA_DAY_END;
 
         Season.SubSeason subSeason = getCurrentSubSeason(level);
@@ -31,20 +57,21 @@ public class DayCycleHandler {
             ? (12000.0 / dayRealTicks)
             : (12000.0 / nightRealTicks);
 
-        // Ваниль уже добавила +1, мы добавляем разницу
         accumulator += (targetRate - 1.0);
 
         long toAdd = (long) accumulator;
         if (toAdd != 0) {
             accumulator -= toAdd;
-            long newTime = level.getDayTime() + toAdd;
-            // Правильный wrap вместо обрезки до 0
+            long newTime = currentTime + toAdd;
             if (newTime < 0) newTime = ((newTime % VANILLA_CYCLE) + VANILLA_CYCLE) % VANILLA_CYCLE;
             level.setDayTime(newTime);
+            lastKnownTime = newTime;
+        } else {
+            lastKnownTime = currentTime;
         }
     }
 
-    private Season.SubSeason getCurrentSubSeason(ServerLevel level) {
+    public static Season.SubSeason getCurrentSubSeason(ServerLevel level) {
         try {
             var seasonState = SeasonHelper.getSeasonState(level);
             if (seasonState != null) return seasonState.getSubSeason();
@@ -52,7 +79,7 @@ public class DayCycleHandler {
         return Season.SubSeason.MID_SPRING;
     }
 
-    private double getRealDayTicks(Season.SubSeason sub) {
+    public static double getRealDayTicks(Season.SubSeason sub) {
         if (sub == null) return ModConfig.SPRING_DAY_TICKS.get();
         return switch (sub) {
             case EARLY_SPRING, MID_SPRING, LATE_SPRING -> ModConfig.SPRING_DAY_TICKS.get();
@@ -63,7 +90,7 @@ public class DayCycleHandler {
         };
     }
 
-    private double getRealNightTicks(Season.SubSeason sub) {
+    public static double getRealNightTicks(Season.SubSeason sub) {
         if (sub == null) return ModConfig.SPRING_NIGHT_TICKS.get();
         return switch (sub) {
             case EARLY_SPRING, MID_SPRING, LATE_SPRING -> ModConfig.SPRING_NIGHT_TICKS.get();
