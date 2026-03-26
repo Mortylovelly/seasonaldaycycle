@@ -2,6 +2,17 @@ modLoader="javafml"
 loaderVersion="[47,)"
 license="MIT"
 
+[[mods]]
+modId="seasonaldaycycle"
+version="1.0.0"
+displayName="Seasonal Day Cycle"
+description='''
+Extends the Minecraft day-night cycle length based on the current Serene Seasons season.
+Summer = longer day, Winter = longer night. TPS is not affected.
+'''
+
+mixins = ["seasonaldaycycle.mixins.json"]
+
 [[dependencies.seasonaldaycycle]]
     modId="forge"
     mandatory=true
@@ -22,12 +33,3 @@ license="MIT"
     versionRange="[9,)"
     ordering="AFTER"
     side="BOTH"
-
-[[mods]]
-modId="seasonaldaycycle"
-version="1.0.0"
-displayName="Seasonal Day Cycle"
-description='''
-Extends the Minecraft day-night cycle length based on the current Serene Seasons season.
-Summer = longer day, Winter = longer night. TPS is not affected.
-'''
