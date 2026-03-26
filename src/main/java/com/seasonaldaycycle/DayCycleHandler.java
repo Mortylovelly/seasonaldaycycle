@@ -12,7 +12,6 @@ public class DayCycleHandler {
 
     private double timeDecimalAccumulator = 0.0;
     private long lastKnownTime = -1;
-    private int debugCounter = 0;
 
     private static final long VANILLA_DAY_END           = 12000L;
     private static final long VANILLA_CYCLE             = 24000L;
@@ -23,22 +22,11 @@ public class DayCycleHandler {
         if (event.phase != TickEvent.Phase.START) return;
         if (!(event.level instanceof ServerLevel level)) return;
         if (level.dimension() != net.minecraft.world.level.Level.OVERWORLD) return;
-
-        // Каждые 100 тиков пишем в лог что происходит
-        debugCounter++;
-        if (debugCounter % 100 == 0) {
-            boolean gamerule = level.getGameRules().getBoolean(GameRules.RULE_DAYLIGHT);
-            SeasonalDayCycle.LOGGER.info("[SDC DEBUG] tick={} time={} gamerule={} accumulator={}",
-                debugCounter, level.getDayTime(), gamerule, timeDecimalAccumulator);
-        }
-
-        if (!level.getGameRules().getBoolean(GameRules.RULE_DAYLIGHT)) {
-            SeasonalDayCycle.LOGGER.warn("[SDC DEBUG] gamerule doDaylightCycle = FALSE, мод остановлен!");
-            return;
-        }
+        if (!level.getGameRules().getBoolean(GameRules.RULE_DAYLIGHT)) return;
 
         long currentTime = level.getDayTime();
 
+        // Детекция /time set или другого мода
         if (lastKnownTime >= 0) {
             long diff = Math.abs(currentTime - lastKnownTime);
             if (diff > EXTERNAL_CHANGE_THRESHOLD && diff < VANILLA_CYCLE - EXTERNAL_CHANGE_THRESHOLD) {
@@ -48,7 +36,7 @@ public class DayCycleHandler {
             }
         }
 
-        // Отменяем ванильный +1
+        // Отменяем ванильный +1 — точно как Better Days
         level.setDayTime(currentTime - 1);
         currentTime = currentTime - 1;
 
@@ -63,13 +51,15 @@ public class DayCycleHandler {
             ? (12000.0 / dayRealTicks)
             : (12000.0 / nightRealTicks);
 
+        // Дробный накопитель — время никогда не идёт назад
         timeDecimalAccumulator += speed;
 
-        long toAdd = (long) timeDecimalAccumulator;
+        // Math.floor вместо (long) — убирает дёрганье
+        long toAdd = (long) Math.floor(timeDecimalAccumulator);
         timeDecimalAccumulator -= toAdd;
 
         long newTime = currentTime + toAdd;
-        if (newTime < 0) newTime = 0;
+        if (newTime < 0) newTime = ((newTime % VANILLA_CYCLE) + VANILLA_CYCLE) % VANILLA_CYCLE;
         level.setDayTime(newTime);
         lastKnownTime = newTime;
     }
