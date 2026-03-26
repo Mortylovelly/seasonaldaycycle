@@ -22,14 +22,13 @@ public class ClientTimeInterpolator {
         lastPartialTickTime = 0;
     }
 
-    // Вызывается из MixinClientLevel каждый тик — отменяем ванильный +1
+    // Вызывается из MixinClientLevel — отменяем ванильный тик времени
     public static void onClientTimeTick(ClientLevel level) {
         if (!level.getGameRules().getBoolean(net.minecraft.world.level.GameRules.RULE_DAYLIGHT)) return;
-        // Ничего не делаем — мы отменили tickTime через cancel()
-        // Время двигается только через onRenderTick
+        // tickTime отменён через ci.cancel() в миксине — ничего не делаем
     }
 
-    // Вызывается из MixinMinecraft каждый кадр
+    // Вызывается каждый кадр из ClientSetup или MixinMinecraft
     public static void onRenderTick(Minecraft mc) {
         if (mc.level == null || mc.isPaused()) return;
 
