@@ -3,7 +3,6 @@ package com.seasonaldaycycle;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.event.config.ModConfigEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.minecraftforge.fml.loading.FMLEnvironment;
 import org.apache.logging.log4j.LogManager;
@@ -21,13 +20,7 @@ public class SeasonalDayCycle {
         FMLJavaModLoadingContext.get().getModEventBus()
             .addListener(ModConfig::onLoad);
 
-        // Серверная часть — двигаем время
         MinecraftForge.EVENT_BUS.register(new DayCycleHandler());
-
-        // Клиентская часть — плавная интерполяция солнца
-        if (FMLEnvironment.dist == Dist.CLIENT) {
-            ClientSetup.init();
-        }
 
         LOGGER.info("[SeasonalDayCycle] Loaded! Day cycle tied to Serene Seasons.");
     }
