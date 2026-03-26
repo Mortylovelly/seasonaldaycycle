@@ -16,24 +16,19 @@ public class ClientSetup {
     }
 
     @SubscribeEvent
-    public void onClientTick(TickEvent.ClientTickEvent event) {
-        if (event.phase != TickEvent.Phase.END) return;
-        ClientTimeInterpolator.onClientTick();
-    }
-
-    @SubscribeEvent
     public void onRenderTick(TickEvent.RenderTickEvent event) {
         if (event.phase != TickEvent.Phase.START) return;
-        ClientTimeInterpolator.onRenderTick(event.renderTickTime);
+        Minecraft mc = Minecraft.getInstance();
+        ClientTimeInterpolator.onRenderTick(mc);
     }
 
     @SubscribeEvent
     public void onPlayerJoin(ClientPlayerNetworkEvent.LoggingIn event) {
-        ClientTimeInterpolator.onWorldLoad();
+        ClientTimeInterpolator.reset();
     }
 
     @SubscribeEvent
     public void onPlayerLeave(ClientPlayerNetworkEvent.LoggingOut event) {
-        ClientTimeInterpolator.onWorldUnload();
+        ClientTimeInterpolator.reset();
     }
 }
