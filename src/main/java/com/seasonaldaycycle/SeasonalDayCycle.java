@@ -1,9 +1,11 @@
 package com.seasonaldaycycle;
 
+import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
+import net.minecraftforge.fml.event.config.ModConfigEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
+import net.minecraftforge.fml.loading.FMLEnvironment;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -18,15 +20,15 @@ public class SeasonalDayCycle {
 
         FMLJavaModLoadingContext.get().getModEventBus()
             .addListener(ModConfig::onLoad);
-        FMLJavaModLoadingContext.get().getModEventBus()
-            .addListener(this::onCommonSetup);
 
+        // Серверная часть — двигаем время
         MinecraftForge.EVENT_BUS.register(new DayCycleHandler());
 
-        LOGGER.info("[SeasonalDayCycle] Loaded! Day cycle tied to Serene Seasons.");
-    }
+        // Клиентская часть — плавная интерполяция солнца
+        if (FMLEnvironment.dist == Dist.CLIENT) {
+            ClientSetup.init();
+        }
 
-    private void onCommonSetup(FMLCommonSetupEvent event) {
-        DayCycleCommand.register();
+        LOGGER.info("[SeasonalDayCycle] Loaded! Day cycle tied to Serene Seasons.");
     }
 }
