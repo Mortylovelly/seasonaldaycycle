@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(Minecraft.class)
 public class MixinMinecraft {
 
-    @Inject(method = "runTick", at = @At("HEAD"))
+    @Inject(method = "m_91383_", at = @At("HEAD"), remap = false)
     private void sdc$onRenderTick(boolean renderLevel, CallbackInfo ci) {
         if (renderLevel) {
             ClientTimeInterpolator.onRenderTick((Minecraft)(Object)this);
