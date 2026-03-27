@@ -16,11 +16,12 @@ public class SeasonalDayCycle {
 
     public SeasonalDayCycle() {
         ModConfig.register();
-
-        FMLJavaModLoadingContext.get().getModEventBus()
-            .addListener(ModConfig::onLoad);
-
+        FMLJavaModLoadingContext.get().getModEventBus().addListener(ModConfig::onLoad);
         MinecraftForge.EVENT_BUS.register(new DayCycleHandler());
+
+        if (FMLEnvironment.dist == Dist.CLIENT) {
+            MinecraftForge.EVENT_BUS.register(new ClientEventHandler());
+        }
 
         LOGGER.info("[SeasonalDayCycle] Loaded! Day cycle tied to Serene Seasons.");
     }
