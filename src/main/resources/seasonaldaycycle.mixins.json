@@ -4,9 +4,7 @@
   "package": "com.seasonaldaycycle.mixin",
   "compatibilityLevel": "JAVA_17",
   "mixins": [],
-  "client": [
-    "MixinMinecraft"
-  ],
+  "client": [],
   "injectors": {
     "defaultRequire": 1
   }
