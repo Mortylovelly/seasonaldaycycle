@@ -1,7 +1,6 @@
 package com.seasonaldaycycle;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 
@@ -22,13 +21,6 @@ public class ClientTimeInterpolator {
         lastPartialTickTime = 0;
     }
 
-    // Вызывается из MixinClientLevel — отменяем ванильный тик времени
-    public static void onClientTimeTick(ClientLevel level) {
-        if (!level.getGameRules().getBoolean(net.minecraft.world.level.GameRules.RULE_DAYLIGHT)) return;
-        // tickTime отменён через ci.cancel() в миксине — ничего не делаем
-    }
-
-    // Вызывается каждый кадр из ClientSetup или MixinMinecraft
     public static void onRenderTick(Minecraft mc) {
         if (mc.level == null || mc.isPaused()) return;
 
@@ -77,7 +69,7 @@ public class ClientTimeInterpolator {
         final float change = time - targetTime;
 
         float temp = (timeVelocity + omega * change) * tickTimeDelta;
-        time = targetTime + (long) ((change + temp) * exp);
+        time = targetTime + (long)((change + temp) * exp);
         timeVelocity = (timeVelocity - omega * temp) * exp;
 
         if (change < 0.0F == time > targetTime) {
