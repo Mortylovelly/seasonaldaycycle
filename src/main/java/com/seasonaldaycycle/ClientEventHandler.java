@@ -5,14 +5,21 @@ import net.minecraft.world.level.GameRules;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
+import net.minecraftforge.client.event.RenderLevelStageEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 @OnlyIn(Dist.CLIENT)
 public class ClientEventHandler {
 
-    // Каждый клиентский тик — отменяем ванильный +1 на клиенте
-    // Точно как Better Days undoVanillaTimeTicks()
+    // Каждый кадр рендера — плавная интерполяция
+    @SubscribeEvent
+    public void onRenderLevel(RenderLevelStageEvent event) {
+        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_SKY) return;
+        ClientTimeInterpolator.onRenderTick(Minecraft.getInstance());
+    }
+
+    // Каждый клиентский тик — отменяем ванильный +1
     @SubscribeEvent
     public void onClientTick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
