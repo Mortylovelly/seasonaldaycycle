@@ -17,19 +17,28 @@ public abstract class DayCycleMouseMixin {
 
     @Inject(method = "method_1601", at = @At("HEAD"), cancellable = true, remap = false)
     private void seasonaldaycycle$onMouseButton(long window, int button, int action, int mods, CallbackInfo ci) {
+        MinecraftClient client = MinecraftClient.getInstance();
+
+        // Never intercept vanilla GUI clicks. The Minecraft pause/menu screens
+        // must keep their normal mouse handling even while our HUD cursor mode
+        // is enabled in the world.
+        if (client.currentScreen != null) {
+            seasonaldaycycle$miniInteraction = false;
+            return;
+        }
+
         DayCycleScreen overlay = DayCycleScreen.getActive();
         if (overlay == null) {
             seasonaldaycycle$miniInteraction = false;
             return;
         }
 
-        MinecraftClient client = MinecraftClient.getInstance();
         double scale = client.getWindow().getScaleFactor();
         double mouseX = client.mouse.getX() / scale;
         double mouseY = client.mouse.getY() / scale;
 
         if (SeasonalDayCycleClient.isCursorMode()) {
-            boolean handled = false;
+            boolean handled;
 
             if (seasonaldaycycle$miniInteraction) {
                 handled = overlay.handleMouseButton(
@@ -41,12 +50,7 @@ public abstract class DayCycleMouseMixin {
             } else {
                 handled = overlay.handleMouseButton(mouseX, mouseY, button, action);
 
-                // The minimized clock is rendered 21 px to the right/down from
-                // the minimized widget's logical origin. The old click box was
-                // centered on the origin, so most of the visible clock was not
-                // actually clickable. Retry in widget coordinates when the raw
-                // click was not handled.
-                if (!handled && action != 0 && button == 0) {
+                if (!handled && action == 1 && button == 0) {
                     handled = overlay.handleMouseButton(
                             mouseX - MINI_FORWARD_OFFSET_X,
                             mouseY - MINI_FORWARD_OFFSET_Y,
@@ -64,11 +68,7 @@ public abstract class DayCycleMouseMixin {
             }
 
             client.mouse.unlockCursor();
-            if (handled) {
-                ci.cancel();
-            } else {
-                ci.cancel();
-            }
+            ci.cancel();
             return;
         }
 
@@ -79,13 +79,19 @@ public abstract class DayCycleMouseMixin {
 
     @Inject(method = "method_1600", at = @At("HEAD"), cancellable = true, remap = false)
     private void seasonaldaycycle$onCursorPos(long window, double x, double y, CallbackInfo ci) {
+        MinecraftClient client = MinecraftClient.getInstance();
+
+        if (client.currentScreen != null) {
+            seasonaldaycycle$miniInteraction = false;
+            return;
+        }
+
         DayCycleScreen overlay = DayCycleScreen.getActive();
         if (overlay == null) {
             seasonaldaycycle$miniInteraction = false;
             return;
         }
 
-        MinecraftClient client = MinecraftClient.getInstance();
         double scale = client.getWindow().getScaleFactor();
         double scaledX = x / scale;
         double scaledY = y / scale;
@@ -110,12 +116,17 @@ public abstract class DayCycleMouseMixin {
 
     @Inject(method = "method_1598", at = @At("HEAD"), cancellable = true, remap = false)
     private void seasonaldaycycle$onMouseScroll(long window, double horizontal, double vertical, CallbackInfo ci) {
+        MinecraftClient client = MinecraftClient.getInstance();
+
+        if (client.currentScreen != null) {
+            return;
+        }
+
         DayCycleScreen overlay = DayCycleScreen.getActive();
         if (overlay == null) {
             return;
         }
 
-        MinecraftClient client = MinecraftClient.getInstance();
         double scale = client.getWindow().getScaleFactor();
         double mouseX = client.mouse.getX() / scale;
         double mouseY = client.mouse.getY() / scale;
@@ -134,6 +145,11 @@ public abstract class DayCycleMouseMixin {
 
     @Inject(method = "method_1606", at = @At("HEAD"), cancellable = true, remap = false)
     private void seasonaldaycycle$blockCameraRotation(double timeDelta, CallbackInfo ci) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.currentScreen != null) {
+            return;
+        }
+
         if (DayCycleScreen.isActive() && SeasonalDayCycleClient.isCursorMode()) {
             ci.cancel();
         }
