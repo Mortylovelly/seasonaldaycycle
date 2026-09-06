@@ -24,22 +24,23 @@ public final class DayCycleScreen {
     private static final float UI_SCALE = 0.40f;
 
     private static final int MINI_PANEL_SIZE = 42;
-    private static final int MINI_HITBOX = 34;
+    private static final int MINI_HITBOX_PADDING = 8;
 
     private static final long MIN_TICKS = ModConfig.MIN_CYCLE_LENGTH_TICKS;
     private static final long MAX_TICKS = ModConfig.MAX_CYCLE_LENGTH_TICKS;
     private static final long STEP = ModConfig.CYCLE_LENGTH_STEP_TICKS;
 
     private static final long[] PRESET_TICKS = {
+            20L,
             20L * 60L * 20L,
             30L * 60L * 20L,
-            45L * 60L * 20L,
             60L * 60L * 20L,
-            120L * 60L * 20L
+            6L * 60L * 60L * 20L,
+            24L * 60L * 60L * 20L
     };
 
     private static final String[] PRESET_LABELS = {
-            "20 мин", "30 мин", "45 мин", "60 мин", "2 часа"
+            "1 сек", "20 мин", "30 мин", "1 час", "6 часов", "24 ч"
     };
 
     private static DayCycleScreen ACTIVE;
@@ -102,10 +103,6 @@ public final class DayCycleScreen {
             return;
         }
 
-        // Do not use Minecraft's Screen/Overlay or renderBlur here.
-        // This is a HUD panel, so the world keeps ticking normally and the panel is
-        // rendered directly on the HUD framebuffer. The old blur pass could leave
-        // the HUD render state in a bad state, making only the blurred world visible.
         context.getMatrices().push();
         context.getMatrices().translate(panelX * (1.0f - UI_SCALE), panelY * (1.0f - UI_SCALE), 0.0f);
         context.getMatrices().scale(UI_SCALE, UI_SCALE, 1.0f);
@@ -120,8 +117,16 @@ public final class DayCycleScreen {
     }
 
     private void renderMinimized(DrawContext context, int mouseX, int mouseY) {
+        boolean hover = isMiniHovered(mouseX, mouseY);
         int clockX = miniX + (MINI_PANEL_SIZE - 16) / 2;
         int clockY = miniY + (MINI_PANEL_SIZE - 16) / 2;
+
+        context.fill(miniX, miniY, miniX + MINI_PANEL_SIZE, miniY + MINI_PANEL_SIZE,
+                hover ? 0x664F5964 : 0x443F4851);
+        context.fill(miniX, miniY, miniX + MINI_PANEL_SIZE, miniY + 1,
+                hover ? 0xCCCDD3D9 : 0x667F8790);
+        context.fill(miniX, miniY + MINI_PANEL_SIZE - 1, miniX + MINI_PANEL_SIZE, miniY + MINI_PANEL_SIZE,
+                0x445F6871);
 
         context.getMatrices().push();
         context.getMatrices().translate(clockX + 8, clockY + 8, 0.0f);
@@ -148,9 +153,9 @@ public final class DayCycleScreen {
         int sliderX = left;
         int sliderY = contentTop + 52;
         drawSlider(context, sliderX, sliderY, mouseX, mouseY);
-        context.drawTextWithShadow(textRenderer, Text.literal("1 мин"), sliderX, sliderY + 13, 0xFF929AA4);
-        drawCenteredText(context, Text.literal("3 ч"), sliderX + SLIDER_WIDTH / 2, sliderY + 13, 0xFF929AA4);
-        drawRightText(context, Text.literal("6 ч"), sliderX + SLIDER_WIDTH, sliderY + 13, 0xFF929AA4);
+        context.drawTextWithShadow(textRenderer, Text.literal(formatDurationForLabel(MIN_TICKS)), sliderX, sliderY + 13, 0xFF929AA4);
+        drawCenteredText(context, Text.literal(formatDurationForLabel(sliderMidpointTicks())), sliderX + SLIDER_WIDTH / 2, sliderY + 13, 0xFF929AA4);
+        drawRightText(context, Text.literal(formatDurationForLabel(MAX_TICKS)), sliderX + SLIDER_WIDTH, sliderY + 13, 0xFF929AA4);
 
         int presetY = contentTop + 83;
         context.drawTextWithShadow(textRenderer, Text.literal("БЫСТРЫЙ ВЫБОР"), left, presetY, 0xFFD0D5DB);
@@ -232,7 +237,7 @@ public final class DayCycleScreen {
 
     private void drawPresetSection(DrawContext context, int x, int y, int mouseX, int mouseY) {
         int gap = 4;
-        int buttonWidth = (SLIDER_WIDTH - gap * 4) / 5;
+        int buttonWidth = (SLIDER_WIDTH - gap * 5) / PRESET_TICKS.length;
         for (int i = 0; i < PRESET_TICKS.length; i++) {
             int buttonX = x + i * (buttonWidth + gap);
             boolean hover = inside(mouseX, mouseY, buttonX, y, buttonWidth, BUTTON_HEIGHT);
@@ -277,11 +282,7 @@ public final class DayCycleScreen {
 
         if (action == GLFW.GLFW_PRESS) {
             if (minimized) {
-                if (inside(mouseX, mouseY,
-                        miniX - MINI_HITBOX / 2,
-                        miniY - MINI_HITBOX / 2,
-                        MINI_HITBOX,
-                        MINI_HITBOX)) {
+                if (isMiniHovered(mouseX, mouseY)) {
                     miniPressCandidate = true;
                     draggingMini = false;
                     miniPressStartX = (int) mouseX;
@@ -335,7 +336,7 @@ public final class DayCycleScreen {
 
             int presetY = panelY + HEADER_HEIGHT + 12 + 83 + 16;
             int gap = 4;
-            int buttonWidth = (SLIDER_WIDTH - gap * 4) / 5;
+            int buttonWidth = (SLIDER_WIDTH - gap * 5) / PRESET_TICKS.length;
             for (int i = 0; i < PRESET_TICKS.length; i++) {
                 int buttonX = panelX + 18 + i * (buttonWidth + gap);
                 if (inside(x, y, buttonX, presetY, buttonWidth, BUTTON_HEIGHT)) {
@@ -483,6 +484,10 @@ public final class DayCycleScreen {
         return panelX + 18 + (int) Math.round(normalized * SLIDER_WIDTH);
     }
 
+    private long sliderMidpointTicks() {
+        return ModConfig.sanitizeCycleLengthTicks(Math.round(Math.sqrt((double) MIN_TICKS * MAX_TICKS) / STEP) * STEP);
+    }
+
     private String formatSpeed() {
         double seconds = cycleLengthTicks / 20.0;
         double ratio = 1200.0 / seconds;
@@ -496,6 +501,16 @@ public final class DayCycleScreen {
         long seconds = totalSeconds % 60L;
         if (hours > 0L) return hours + " ч " + minutes + " мин " + seconds + " с";
         if (minutes > 0L) return minutes + " мин " + seconds + " с";
+        return seconds + " с";
+    }
+
+    private static String formatDurationForLabel(long ticks) {
+        long totalSeconds = Math.max(1L, ticks / 20L);
+        long hours = totalSeconds / 3600L;
+        long minutes = (totalSeconds % 3600L) / 60L;
+        long seconds = totalSeconds % 60L;
+        if (hours > 0L) return hours + " ч" + (minutes > 0L ? " " + minutes + " мин" : "");
+        if (minutes > 0L) return minutes + " мин";
         return seconds + " с";
     }
 
@@ -535,6 +550,14 @@ public final class DayCycleScreen {
     private void clampMini(int width, int height) {
         miniX = Math.max(4, Math.min(miniX, width - MINI_PANEL_SIZE - 4));
         miniY = Math.max(4, Math.min(miniY, height - MINI_PANEL_SIZE - 4));
+    }
+
+    private boolean isMiniHovered(double mouseX, double mouseY) {
+        return inside(mouseX, mouseY,
+                miniX - MINI_HITBOX_PADDING,
+                miniY - MINI_HITBOX_PADDING,
+                MINI_PANEL_SIZE + MINI_HITBOX_PADDING * 2,
+                MINI_PANEL_SIZE + MINI_HITBOX_PADDING * 2);
     }
 
     private static void drawCenteredText(DrawContext context, Text text, int centerX, int y, int color) {
