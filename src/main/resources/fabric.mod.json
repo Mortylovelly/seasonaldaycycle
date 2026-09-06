@@ -3,7 +3,7 @@
   "id": "seasonaldaycycle",
   "version": "${version}",
   "name": "Seasonal Day Cycle",
-  "description": "Extends the Minecraft day-night cycle and ties its duration to Serene Seasons.",
+  "description": "Extends the Minecraft day-night cycle and optionally integrates with Serene Seasons.",
   "authors": ["Mortylovelly"],
   "contact": {"sources": "https://github.com/Mortylovelly/seasonaldaycycle"},
   "license": "MIT",
@@ -15,8 +15,9 @@
   "depends": {
     "fabricloader": ">=0.19.3",
     "minecraft": "~1.21.1",
-    "fabric-api": ">=0.116.15",
-    "sereneseasons": ">=10.1.0",
-    "glitchcore": ">=2.0.0"
+    "fabric-api": ">=0.116.15"
+  },
+  "suggests": {
+    "sereneseasons": ">=10.1.0"
   }
 }
