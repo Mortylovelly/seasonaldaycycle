@@ -26,6 +26,7 @@ public final class DayCycleCommand {
         String subSeason = DayCycleHandler.getCurrentSubSeason(level);
         double dayTicks = DayCycleHandler.getRealDayTicks(subSeason);
         double nightTicks = DayCycleHandler.getRealNightTicks(subSeason);
+        long cycleTicks = ModConfig.getCycleLengthTicks();
         long timeInDay = Math.floorMod(level.getTimeOfDay(), 24000L);
         boolean isDay = timeInDay < 12000L;
         String phase = isDay ? "День" : "Ночь";
@@ -39,6 +40,7 @@ public final class DayCycleCommand {
         source.sendFeedback(() -> Text.literal("[SeasonalDayCycle]\n" +
                 "Сезон: " + getSeasonName(subSeason) + "\n" +
                 "Фаза: " + phase + "\n" +
+                "Полные сутки: " + formatMinutes(cycleTicks) + "\n" +
                 "Длина дня: " + formatMinutes(dayTicks) + "\n" +
                 "Длина ночи: " + formatMinutes(nightTicks) + "\n" +
                 "До смены фазы: " + minLeft + "м " + secLeft + "с"), false);
