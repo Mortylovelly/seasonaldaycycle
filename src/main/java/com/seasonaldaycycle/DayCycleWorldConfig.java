@@ -1,9 +1,10 @@
 package com.seasonaldaycycle;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.WorldSavePath;
-import net.minecraft.world.World;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -15,6 +16,7 @@ import java.util.WeakHashMap;
 
 public final class DayCycleWorldConfig {
     private static final String FILE_NAME = ".seasonaldaycycle.json";
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Map<ServerWorld, Long> CACHE = new WeakHashMap<>();
 
     private DayCycleWorldConfig() {}
@@ -65,7 +67,7 @@ public final class DayCycleWorldConfig {
         }
 
         try (Reader reader = Files.newBufferedReader(path)) {
-            Config config = ModConfigGson.getGson().fromJson(reader, Config.class);
+            Config config = GSON.fromJson(reader, Config.class);
             if (config != null) {
                 return ModConfig.sanitizeCycleLengthTicks(config.cycleLengthTicks);
             }
@@ -83,7 +85,7 @@ public final class DayCycleWorldConfig {
         try {
             Files.createDirectories(path.getParent());
             try (Writer writer = Files.newBufferedWriter(path)) {
-                ModConfigGson.getGson().toJson(new Config(ModConfig.sanitizeCycleLengthTicks(ticks)), writer);
+                GSON.toJson(new Config(ModConfig.sanitizeCycleLengthTicks(ticks)), writer);
             }
         } catch (IOException exception) {
             SeasonalDayCycle.LOGGER.error("[SeasonalDayCycle] Failed to save world cycle config.", exception);
