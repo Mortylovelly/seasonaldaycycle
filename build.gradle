@@ -12,7 +12,6 @@ base {
 
 repositories {
     maven { url = 'https://maven.fabricmc.net/' }
-    maven { url = 'https://cursemaven.com' }
     mavenCentral()
 }
 
@@ -25,9 +24,6 @@ dependencies {
     mappings "net.fabricmc:yarn:${yarn_mappings}:v2"
     modImplementation "net.fabricmc:fabric-loader:${loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_api_version}"
-
-    modImplementation "curse.maven:serene-seasons-291874:${serene_seasons_version}"
-    modImplementation "curse.maven:glitchcore-955399:${glitchcore_version}"
 }
 
 processResources {
