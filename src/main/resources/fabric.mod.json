@@ -12,6 +12,9 @@
     "main": ["com.seasonaldaycycle.SeasonalDayCycle"],
     "client": ["com.seasonaldaycycle.client.SeasonalDayCycleClient"]
   },
+  "mixins": [
+    "seasonaldaycycle.mixins.json"
+  ],
   "depends": {
     "fabricloader": ">=0.19.3",
     "minecraft": "~1.21.1",
