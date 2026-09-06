@@ -55,9 +55,12 @@ public final class ModConfig {
         return values.cycleLengthTicks;
     }
 
+    /**
+     * Changes the in-memory value only. World saves are handled by DayCycleWorldConfig,
+     * so a GUI change cannot leak from one world save into another.
+     */
     public static void setCycleLengthTicks(long ticks) {
         values.cycleLengthTicks = sanitizeCycleLengthTicks(ticks);
-        save();
     }
 
     public static long sanitizeCycleLengthTicks(long ticks) {
