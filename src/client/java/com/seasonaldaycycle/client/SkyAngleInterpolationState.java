@@ -36,13 +36,39 @@ public final class SkyAngleInterpolationState {
             return;
         }
 
-        // Normal server time progression, including deliberately very fast cycles,
-        // must be interpolated. A fixed jump threshold incorrectly classified high
-        // cycle speeds as /time-like teleports and made the sun snap between ticks.
+        // Detect an actual external /time-like jump by comparing the received
+        // movement against the speed expected from the configured real-time cycle.
+        // This keeps high-speed cycles smooth while still snapping true external
+        // time changes instead of animating them as if they were normal progression.
+        double expectedPerClientTick = getExpectedGameTicksPerClientTick();
+        double expectedDifference = expectedPerClientTick * elapsedClientTicks;
+        boolean looksExternal = expectedDifference > 0.0
+                && (Math.abs(difference) < expectedDifference * 0.35
+                || Math.abs(difference) > expectedDifference * 2.5);
+
+        if (looksExternal && Math.abs(difference) > 200L) {
+            state.previousServerTime = serverTime;
+            state.currentServerTime = serverTime;
+            state.serverInterval = 20.0;
+            state.anchorClientTick = clientTick;
+            return;
+        }
+
         state.previousServerTime = state.currentServerTime;
         state.currentServerTime = serverTime;
         state.serverInterval = elapsedClientTicks;
         state.anchorClientTick = clientTick;
+    }
+
+    private static double getExpectedGameTicksPerClientTick() {
+        long cycleTicks = SeasonalDayCycleClient.getKnownCycleLengthTicks();
+        if (cycleTicks <= 0L) {
+            cycleTicks = 72000L;
+        }
+
+        // cycleTicks is real client/server ticks for one complete Minecraft day.
+        // 24000 game-time ticks occur during one complete cycle.
+        return 24000.0 / cycleTicks;
     }
 
     public static synchronized double getVisualTime(LunarWorldView world, long clientTick, float tickDelta) {
