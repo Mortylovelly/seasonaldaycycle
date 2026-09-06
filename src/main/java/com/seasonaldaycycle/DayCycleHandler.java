@@ -1,70 +1,61 @@
 package com.seasonaldaycycle;
 
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.GameRules;
-import net.minecraftforge.event.TickEvent;
-import net.minecraftforge.eventbus.api.EventPriority;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraft.server.world.ServerWorld;
+import net.minecraft.world.GameRules;
+import net.minecraft.world.World;
 import sereneseasons.api.season.Season;
 import sereneseasons.api.season.SeasonHelper;
 
-public class DayCycleHandler {
+import java.util.Map;
+import java.util.WeakHashMap;
 
-    private double timeDecimalAccumulator = 0.0;
-    private long lastKnownTime = -1;
-
-    private static final long VANILLA_DAY_END           = 12000L;
-    private static final long VANILLA_CYCLE             = 24000L;
+public final class DayCycleHandler {
+    private static final Map<ServerWorld, State> STATES = new WeakHashMap<>();
+    private static final long VANILLA_DAY_END = 12000L;
+    private static final long VANILLA_CYCLE = 24000L;
     private static final long EXTERNAL_CHANGE_THRESHOLD = 200L;
 
-    @SubscribeEvent(priority = EventPriority.LOWEST)
-    public void onServerTick(TickEvent.LevelTickEvent event) {
-        if (event.phase != TickEvent.Phase.START) return;
-        if (!(event.level instanceof ServerLevel level)) return;
-        if (level.dimension() != net.minecraft.world.level.Level.OVERWORLD) return;
-        if (!level.getGameRules().getBoolean(GameRules.RULE_DAYLIGHT)) return;
+    private DayCycleHandler() {}
 
-        long currentTime = level.getDayTime();
+    public static void onWorldTick(ServerWorld level) {
+        if (level.getRegistryKey() != World.OVERWORLD) return;
+        if (!level.getGameRules().getBoolean(GameRules.DO_DAYLIGHT_CYCLE)) return;
 
-        // Детекция /time set или другого мода
-        if (lastKnownTime >= 0) {
-            long diff = Math.abs(currentTime - lastKnownTime);
+        State state = STATES.computeIfAbsent(level, ignored -> new State());
+        long currentTime = level.getTimeOfDay();
+
+        if (state.lastKnownTime >= 0) {
+            long diff = Math.abs(currentTime - state.lastKnownTime);
             if (diff > EXTERNAL_CHANGE_THRESHOLD && diff < VANILLA_CYCLE - EXTERNAL_CHANGE_THRESHOLD) {
-                timeDecimalAccumulator = 0.0;
-                lastKnownTime = currentTime;
+                state.timeDecimalAccumulator = 0.0;
+                state.lastKnownTime = currentTime;
                 return;
             }
         }
 
-        // Отменяем ванильный +1 — точно как Better Days
-        level.setDayTime(currentTime - 1);
-        currentTime = currentTime - 1;
+        level.setTimeOfDay(currentTime - 1L);
+        currentTime--;
 
-        long timeInDay = currentTime % VANILLA_CYCLE;
-        boolean isDay  = timeInDay < VANILLA_DAY_END;
-
+        long timeInDay = Math.floorMod(currentTime, VANILLA_CYCLE);
+        boolean isDay = timeInDay < VANILLA_DAY_END;
         Season.SubSeason subSeason = getCurrentSubSeason(level);
-        double dayRealTicks   = getRealDayTicks(subSeason);
-        double nightRealTicks = getRealNightTicks(subSeason);
 
-        double speed = isDay
-            ? (12000.0 / dayRealTicks)
-            : (12000.0 / nightRealTicks);
+        double realDayTicks = getRealDayTicks(subSeason);
+        double realNightTicks = getRealNightTicks(subSeason);
+        double speed = isDay ? 12000.0 / realDayTicks : 12000.0 / realNightTicks;
 
-        // Дробный накопитель — время никогда не идёт назад
-        timeDecimalAccumulator += speed;
-
-        // Math.floor вместо (long) — убирает дёрганье
-        long toAdd = (long) Math.floor(timeDecimalAccumulator);
-        timeDecimalAccumulator -= toAdd;
+        state.timeDecimalAccumulator += speed;
+        long toAdd = (long) Math.floor(state.timeDecimalAccumulator);
+        state.timeDecimalAccumulator -= toAdd;
 
         long newTime = currentTime + toAdd;
-        if (newTime < 0) newTime = ((newTime % VANILLA_CYCLE) + VANILLA_CYCLE) % VANILLA_CYCLE;
-        level.setDayTime(newTime);
-        lastKnownTime = newTime;
+        if (newTime < 0) newTime = Math.floorMod(newTime, VANILLA_CYCLE);
+
+        level.setTimeOfDay(newTime);
+        state.lastKnownTime = newTime;
     }
 
-    public static Season.SubSeason getCurrentSubSeason(ServerLevel level) {
+    public static Season.SubSeason getCurrentSubSeason(ServerWorld level) {
         try {
             var seasonState = SeasonHelper.getSeasonState(level);
             if (seasonState != null) return seasonState.getSubSeason();
@@ -73,24 +64,29 @@ public class DayCycleHandler {
     }
 
     public static double getRealDayTicks(Season.SubSeason sub) {
-        if (sub == null) return ModConfig.SPRING_DAY_TICKS.get();
+        if (sub == null) return ModConfig.getSpringDayTicks();
         return switch (sub) {
-            case EARLY_SPRING, MID_SPRING, LATE_SPRING -> ModConfig.SPRING_DAY_TICKS.get();
-            case EARLY_SUMMER, MID_SUMMER, LATE_SUMMER -> ModConfig.SUMMER_DAY_TICKS.get();
-            case EARLY_AUTUMN, MID_AUTUMN, LATE_AUTUMN -> ModConfig.AUTUMN_DAY_TICKS.get();
-            case EARLY_WINTER, MID_WINTER, LATE_WINTER -> ModConfig.WINTER_DAY_TICKS.get();
-            default -> ModConfig.SPRING_DAY_TICKS.get();
+            case EARLY_SPRING, MID_SPRING, LATE_SPRING -> ModConfig.getSpringDayTicks();
+            case EARLY_SUMMER, MID_SUMMER, LATE_SUMMER -> ModConfig.getSummerDayTicks();
+            case EARLY_AUTUMN, MID_AUTUMN, LATE_AUTUMN -> ModConfig.getAutumnDayTicks();
+            case EARLY_WINTER, MID_WINTER, LATE_WINTER -> ModConfig.getWinterDayTicks();
+            default -> ModConfig.getSpringDayTicks();
         };
     }
 
     public static double getRealNightTicks(Season.SubSeason sub) {
-        if (sub == null) return ModConfig.SPRING_NIGHT_TICKS.get();
+        if (sub == null) return ModConfig.getSpringNightTicks();
         return switch (sub) {
-            case EARLY_SPRING, MID_SPRING, LATE_SPRING -> ModConfig.SPRING_NIGHT_TICKS.get();
-            case EARLY_SUMMER, MID_SUMMER, LATE_SUMMER -> ModConfig.SUMMER_NIGHT_TICKS.get();
-            case EARLY_AUTUMN, MID_AUTUMN, LATE_AUTUMN -> ModConfig.AUTUMN_NIGHT_TICKS.get();
-            case EARLY_WINTER, MID_WINTER, LATE_WINTER -> ModConfig.WINTER_NIGHT_TICKS.get();
-            default -> ModConfig.SPRING_NIGHT_TICKS.get();
+            case EARLY_SPRING, MID_SPRING, LATE_SPRING -> ModConfig.getSpringNightTicks();
+            case EARLY_SUMMER, MID_SUMMER, LATE_SUMMER -> ModConfig.getSummerNightTicks();
+            case EARLY_AUTUMN, MID_AUTUMN, LATE_AUTUMN -> ModConfig.getAutumnNightTicks();
+            case EARLY_WINTER, MID_WINTER, LATE_WINTER -> ModConfig.getWinterNightTicks();
+            default -> ModConfig.getSpringNightTicks();
         };
+    }
+
+    private static final class State {
+        double timeDecimalAccumulator = 0.0;
+        long lastKnownTime = -1L;
     }
 }
