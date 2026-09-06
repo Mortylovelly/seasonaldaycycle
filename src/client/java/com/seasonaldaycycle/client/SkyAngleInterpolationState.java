@@ -7,7 +7,6 @@ import java.util.WeakHashMap;
 
 public final class SkyAngleInterpolationState {
     private static final long DAY_LENGTH = 24000L;
-    private static final long EXTERNAL_CHANGE_THRESHOLD = 200L;
 
     private static final Map<LunarWorldView, State> STATES = new WeakHashMap<>();
 
@@ -32,21 +31,18 @@ public final class SkyAngleInterpolationState {
         long rawDifference = serverTime - state.currentServerTime;
         long difference = normalizeDifference(rawDifference);
 
-        if (isExternalChange(difference)) {
-            state.previousServerTime = serverTime;
-            state.currentServerTime = serverTime;
-            state.serverInterval = 20.0;
-            state.anchorClientTick = clientTick;
+        long elapsedClientTicks = clientTick - state.anchorClientTick;
+        if (elapsedClientTicks <= 0L || difference == 0L) {
             return;
         }
 
-        long elapsedClientTicks = clientTick - state.anchorClientTick;
-        if (elapsedClientTicks > 0L && difference != 0L) {
-            state.previousServerTime = state.currentServerTime;
-            state.currentServerTime = serverTime;
-            state.serverInterval = elapsedClientTicks;
-            state.anchorClientTick = clientTick;
-        }
+        // Normal server time progression, including deliberately very fast cycles,
+        // must be interpolated. A fixed jump threshold incorrectly classified high
+        // cycle speeds as /time-like teleports and made the sun snap between ticks.
+        state.previousServerTime = state.currentServerTime;
+        state.currentServerTime = serverTime;
+        state.serverInterval = elapsedClientTicks;
+        state.anchorClientTick = clientTick;
     }
 
     public static synchronized double getVisualTime(LunarWorldView world, long clientTick, float tickDelta) {
@@ -62,10 +58,10 @@ public final class SkyAngleInterpolationState {
         }
 
         double elapsed = Math.max(0.0, (clientTick - state.anchorClientTick) + tickDelta);
-        double speed = 1.0;
+        double speed = 0.0;
 
         long serverDifference = normalizeDifference(state.currentServerTime - state.previousServerTime);
-        if (Math.abs(serverDifference) > 0L && state.serverInterval > 0.0) {
+        if (state.serverInterval > 0.0) {
             speed = serverDifference / state.serverInterval;
         }
 
@@ -80,10 +76,6 @@ public final class SkyAngleInterpolationState {
             return difference + DAY_LENGTH;
         }
         return difference;
-    }
-
-    public static boolean isExternalChange(long difference) {
-        return Math.abs(difference) > EXTERNAL_CHANGE_THRESHOLD;
     }
 
     public static final class State {
