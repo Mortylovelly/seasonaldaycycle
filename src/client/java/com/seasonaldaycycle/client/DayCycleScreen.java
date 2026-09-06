@@ -5,7 +5,7 @@ import com.seasonaldaycycle.network.SetDayCycleLengthPayload;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.client.gui.screen.Overlay;
 import net.minecraft.client.sound.PositionedSoundInstance;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
@@ -13,7 +13,7 @@ import net.minecraft.sound.SoundEvents;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
 
-public final class DayCycleScreen extends Screen {
+public final class DayCycleScreen extends Overlay {
     private static final int PANEL_WIDTH = 360;
     private static final int PANEL_HEIGHT = 252;
     private static final int HEADER_HEIGHT = 34;
@@ -25,7 +25,7 @@ public final class DayCycleScreen extends Screen {
     private static final float UI_SCALE = 0.40f;
 
     private static final int MINI_PANEL_SIZE = 42;
-    private static final int MINI_CLOCK_SCALE = 1;
+    private static final int MINI_HITBOX = 34;
 
     private static final long MIN_TICKS = ModConfig.MIN_CYCLE_LENGTH_TICKS;
     private static final long MAX_TICKS = ModConfig.MAX_CYCLE_LENGTH_TICKS;
@@ -43,7 +43,8 @@ public final class DayCycleScreen extends Screen {
             "20 мин", "30 мин", "45 мин", "60 мин", "2 часа"
     };
 
-    private final Screen parent;
+    private static DayCycleScreen ACTIVE;
+
     private long cycleLengthTicks;
     private int panelX;
     private int panelY;
@@ -52,36 +53,52 @@ public final class DayCycleScreen extends Screen {
     private boolean minimized;
     private boolean draggingPanel;
     private boolean draggingSlider;
+    private boolean draggingMini;
+    private boolean miniPressCandidate;
     private int dragOffsetX;
     private int dragOffsetY;
+    private int miniPressStartX;
+    private int miniPressStartY;
     private long savedUntil;
     private boolean serverSynced;
     private int lastSoundStep = Integer.MIN_VALUE;
 
-    public DayCycleScreen(Screen parent) {
-        super(Text.literal("Настройки суток"));
-        this.parent = parent;
+    public DayCycleScreen() {
         this.cycleLengthTicks = ModConfig.getCycleLengthTicks();
+        ACTIVE = this;
     }
 
-    @Override
-    protected void init() {
-        if (panelX == 0 && panelY == 0) {
-            panelX = (this.width - visualPanelWidth()) / 2;
-            panelY = Math.max(8, (this.height - visualPanelHeight()) / 2);
-        }
+    public static boolean isActive() {
+        return ACTIVE != null;
+    }
 
+    public static DayCycleScreen getActive() {
+        return ACTIVE;
+    }
+
+    public void init(int width, int height) {
+        if (panelX == 0 && panelY == 0) {
+            panelX = (width - visualPanelWidth()) / 2;
+            panelY = Math.max(8, (height - visualPanelHeight()) / 2);
+        }
         if (miniX == 0 && miniY == 0) {
             miniX = panelX;
             miniY = panelY;
         }
-
-        clampPanel();
-        clampMini();
+        clampPanel(width, height);
+        clampMini(width, height);
     }
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        int width = client.getWindow().getScaledWidth();
+        int height = client.getWindow().getScaledHeight();
+
+        if (panelX == 0 && panelY == 0) {
+            init(width, height);
+        }
+
         if (minimized) {
             renderMinimized(context, mouseX, mouseY);
             return;
@@ -90,9 +107,9 @@ public final class DayCycleScreen extends Screen {
         int visualWidth = visualPanelWidth();
         int visualHeight = visualPanelHeight();
 
-        // Blur only the physical area occupied by our panel.
+        // Only the panel area is blurred. The rest of the world remains untouched.
         context.enableScissor(panelX, panelY, panelX + visualWidth, panelY + visualHeight);
-        this.applyBlur(delta);
+        client.gameRenderer.renderBlur(delta);
 
         context.getMatrices().push();
         context.getMatrices().translate(panelX * (1.0f - UI_SCALE), panelY * (1.0f - UI_SCALE), 0.0f);
@@ -109,59 +126,67 @@ public final class DayCycleScreen extends Screen {
     }
 
     private void renderMinimized(DrawContext context, int mouseX, int mouseY) {
-        boolean hovered = inside(mouseX, mouseY, miniX, miniY, MINI_PANEL_SIZE, MINI_PANEL_SIZE);
-
-        context.fill(miniX + 2, miniY + 3, miniX + MINI_PANEL_SIZE + 2, miniY + MINI_PANEL_SIZE + 3, 0x50000000);
-        context.fill(miniX, miniY, miniX + MINI_PANEL_SIZE, miniY + MINI_PANEL_SIZE, hovered ? 0xD82A2E34 : 0xD01B1E23);
-        context.fill(miniX, miniY, miniX + MINI_PANEL_SIZE, miniY + 1, hovered ? 0xFFD4D9DF : 0xFF444A53);
-        context.fill(miniX, miniY + MINI_PANEL_SIZE - 1, miniX + MINI_PANEL_SIZE, miniY + MINI_PANEL_SIZE, 0xFF30343A);
-        context.fill(miniX, miniY, miniX + 1, miniY + MINI_PANEL_SIZE, 0xFF30343A);
-        context.fill(miniX + MINI_PANEL_SIZE - 1, miniY, miniX + MINI_PANEL_SIZE, miniY + MINI_PANEL_SIZE, 0xFF30343A);
+        MinecraftClient client = MinecraftClient.getInstance();
+        boolean hovered = inside(mouseX, mouseY,
+                miniX - MINI_HITBOX / 2,
+                miniY - MINI_HITBOX / 2,
+                MINI_HITBOX,
+                MINI_HITBOX);
 
         int clockX = miniX + (MINI_PANEL_SIZE - 16) / 2;
         int clockY = miniY + (MINI_PANEL_SIZE - 16) / 2;
+
         context.getMatrices().push();
         context.getMatrices().translate(clockX + 8, clockY + 8, 0.0f);
-        context.getMatrices().scale(MINI_CLOCK_SCALE, MINI_CLOCK_SCALE, 1.0f);
+        context.getMatrices().scale(1.0f, 1.0f, 1.0f);
         context.drawItem(new ItemStack(Items.CLOCK), -8, -8);
         context.getMatrices().pop();
+
+        if (hovered) {
+            context.fill(miniX + 3, miniY + MINI_PANEL_SIZE - 2, miniX + MINI_PANEL_SIZE - 3, miniY + MINI_PANEL_SIZE - 1, 0xAAFFFFFF);
+        }
+
+        // Keep the client referenced here so this method is resilient to resource reloads.
+        if (client.world == null) return;
     }
 
     private void drawContent(DrawContext context, int mouseX, int mouseY) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        var textRenderer = client.textRenderer;
         int left = panelX + 18;
         int right = panelX + PANEL_WIDTH - 18;
         int contentTop = panelY + HEADER_HEIGHT + 12;
 
-        context.drawTextWithShadow(this.textRenderer, this.title, left, panelY + 11, 0xFFFFFFFF);
-        context.drawTextWithShadow(this.textRenderer, Text.literal("скорость времени"), left, panelY + 23, 0xFFB2B8C0);
+        context.drawTextWithShadow(textRenderer, Text.literal("Настройки суток"), left, panelY + 11, 0xFFFFFFFF);
+        context.drawTextWithShadow(textRenderer, Text.literal("скорость времени"), left, panelY + 23, 0xFFC0C6CD);
         drawMinimizeButton(context, mouseX, mouseY);
         drawCloseButton(context, mouseX, mouseY);
 
-        context.drawTextWithShadow(this.textRenderer, Text.literal("ПОЛНЫЕ СУТКИ"), left, contentTop, 0xFFBFC5CC);
+        context.drawTextWithShadow(textRenderer, Text.literal("ПОЛНЫЕ СУТКИ"), left, contentTop, 0xFFD0D5DB);
         drawCenteredText(context, Text.literal(formatDuration(cycleLengthTicks)), left + 109, contentTop + 16, 0xFFFFFFFF);
-        drawCenteredText(context, Text.literal(cycleLengthTicks + " тиков"), left + 109, contentTop + 31, 0xFF858D97);
+        drawCenteredText(context, Text.literal(cycleLengthTicks + " тиков"), left + 109, contentTop + 31, 0xFF929AA4);
 
         int sliderX = left;
         int sliderY = contentTop + 52;
         drawSlider(context, sliderX, sliderY, mouseX, mouseY);
-        context.drawTextWithShadow(this.textRenderer, Text.literal("1 мин"), sliderX, sliderY + 13, 0xFF858D97);
-        drawCenteredText(context, Text.literal("3 ч"), sliderX + SLIDER_WIDTH / 2, sliderY + 13, 0xFF858D97);
-        drawRightText(context, Text.literal("6 ч"), sliderX + SLIDER_WIDTH, sliderY + 13, 0xFF858D97);
+        context.drawTextWithShadow(textRenderer, Text.literal("1 мин"), sliderX, sliderY + 13, 0xFF929AA4);
+        drawCenteredText(context, Text.literal("3 ч"), sliderX + SLIDER_WIDTH / 2, sliderY + 13, 0xFF929AA4);
+        drawRightText(context, Text.literal("6 ч"), sliderX + SLIDER_WIDTH, sliderY + 13, 0xFF929AA4);
 
         int presetY = contentTop + 83;
-        context.drawTextWithShadow(this.textRenderer, Text.literal("БЫСТРЫЙ ВЫБОР"), left, presetY, 0xFFBFC5CC);
+        context.drawTextWithShadow(textRenderer, Text.literal("БЫСТРЫЙ ВЫБОР"), left, presetY, 0xFFD0D5DB);
         drawPresetSection(context, left, presetY + 16, mouseX, mouseY);
 
         drawClockCard(context, right - CLOCK_CARD_WIDTH, contentTop);
 
         int infoY = panelY + PANEL_HEIGHT - 34;
-        context.drawTextWithShadow(this.textRenderer, Text.literal("Скорость: " + formatSpeed()), left, infoY, 0xFFD5DAE0);
-        drawRightText(context, Text.literal("Пропорции сезонов сохраняются"), right, infoY, 0xFF828A94);
+        context.drawTextWithShadow(textRenderer, Text.literal("Скорость: " + formatSpeed()), left, infoY, 0xFFE2E6EA);
+        drawRightText(context, Text.literal("Пропорции сезонов сохраняются"), right, infoY, 0xFF929AA4);
 
         long now = System.currentTimeMillis();
         if (savedUntil > now) {
-            drawRightText(context, Text.literal("✓ Сохранено"), right, infoY - 14, 0xFFC7F5CE);
-        } else if (!serverSynced && this.client != null && this.client.getNetworkHandler() != null) {
+            drawRightText(context, Text.literal("✓ Сохранено"), right, infoY - 14, 0xFFC9F6D0);
+        } else if (!serverSynced && client.getNetworkHandler() != null) {
             drawRightText(context, Text.literal("Синхронизация..."), right, infoY - 14, 0xFFFFDB91);
         }
     }
@@ -190,40 +215,40 @@ public final class DayCycleScreen extends Screen {
     }
 
     private void drawPanelGlass(DrawContext context) {
-        // Strong frosted-glass panel: the world behind remains visible, but heavily tinted.
-        context.fill(panelX + 3, panelY + 5, panelX + PANEL_WIDTH + 3, panelY + PANEL_HEIGHT + 5, 0x42000000);
-        context.fill(panelX, panelY, panelX + PANEL_WIDTH, panelY + PANEL_HEIGHT, 0xB51B1E23);
-        context.fill(panelX + 1, panelY + 1, panelX + PANEL_WIDTH - 1, panelY + HEADER_HEIGHT, 0xC326292F);
-        context.fill(panelX + 1, panelY + HEADER_HEIGHT, panelX + PANEL_WIDTH - 1, panelY + HEADER_HEIGHT + 1, 0xCC4A5059);
-        context.fill(panelX + 1, panelY + PANEL_HEIGHT - 1, panelX + PANEL_WIDTH - 1, panelY + PANEL_HEIGHT, 0xC83A3F47);
-        context.fill(panelX + 1, panelY + 1, panelX + 2, panelY + PANEL_HEIGHT - 1, 0xC83A3F47);
-        context.fill(panelX + PANEL_WIDTH - 2, panelY + 1, panelX + PANEL_WIDTH - 1, panelY + PANEL_HEIGHT - 1, 0xC83A3F47);
-        context.fill(panelX + 12, panelY + HEADER_HEIGHT + 7, panelX + PANEL_WIDTH - 12, panelY + HEADER_HEIGHT + 8, 0x20FFFFFF);
+        // Transparent but strong frosted glass. The world is visible through it.
+        context.fill(panelX + 3, panelY + 5, panelX + PANEL_WIDTH + 3, panelY + PANEL_HEIGHT + 5, 0x32000000);
+        context.fill(panelX, panelY, panelX + PANEL_WIDTH, panelY + PANEL_HEIGHT, 0x8A666B73);
+        context.fill(panelX + 1, panelY + 1, panelX + PANEL_WIDTH - 1, panelY + HEADER_HEIGHT, 0x9B777C84);
+        context.fill(panelX + 1, panelY + HEADER_HEIGHT, panelX + PANEL_WIDTH - 1, panelY + HEADER_HEIGHT + 1, 0xAABDC3CB);
+        context.fill(panelX + 1, panelY + PANEL_HEIGHT - 1, panelX + PANEL_WIDTH - 1, panelY + PANEL_HEIGHT, 0x8A949AA3);
+        context.fill(panelX + 1, panelY + 1, panelX + 2, panelY + PANEL_HEIGHT - 1, 0x8A949AA3);
+        context.fill(panelX + PANEL_WIDTH - 2, panelY + 1, panelX + PANEL_WIDTH - 1, panelY + PANEL_HEIGHT - 1, 0x8A949AA3);
+        context.fill(panelX + 12, panelY + HEADER_HEIGHT + 7, panelX + PANEL_WIDTH - 12, panelY + HEADER_HEIGHT + 8, 0x28FFFFFF);
     }
 
     private void drawCloseButton(DrawContext context, int mouseX, int mouseY) {
         int x = panelX + PANEL_WIDTH - 29;
         int y = panelY + 6;
         boolean hover = inside(mouseX, mouseY, x, y, 22, 22);
-        context.fill(x, y, x + 22, y + 22, hover ? 0xFF393D44 : 0xAA292C31);
-        context.drawCenteredTextWithShadow(this.textRenderer, "×", x + 11, y + 2, hover ? 0xFFFFFFFF : 0xFFE3E7EB);
+        context.fill(x, y, x + 22, y + 22, hover ? 0xCC4A4F57 : 0x88464A51);
+        context.drawCenteredTextWithShadow(MinecraftClient.getInstance().textRenderer, "×", x + 11, y + 2, hover ? 0xFFFFFFFF : 0xFFE8EBEE);
     }
 
     private void drawMinimizeButton(DrawContext context, int mouseX, int mouseY) {
         int x = panelX + PANEL_WIDTH - 57;
         int y = panelY + 6;
         boolean hover = inside(mouseX, mouseY, x, y, 22, 22);
-        context.fill(x, y, x + 22, y + 22, hover ? 0xFF393D44 : 0xAA292C31);
-        context.drawCenteredTextWithShadow(this.textRenderer, "−", x + 11, y + 2, hover ? 0xFFFFFFFF : 0xFFE3E7EB);
+        context.fill(x, y, x + 22, y + 22, hover ? 0xCC4A4F57 : 0x88464A51);
+        context.drawCenteredTextWithShadow(MinecraftClient.getInstance().textRenderer, "−", x + 11, y + 2, hover ? 0xFFFFFFFF : 0xFFE8EBEE);
     }
 
     private void drawSlider(DrawContext context, int x, int y, int mouseX, int mouseY) {
         int trackY = y + 2;
-        context.fill(x, trackY, x + SLIDER_WIDTH, trackY + SLIDER_HEIGHT, 0xFF30343A);
+        context.fill(x, trackY, x + SLIDER_WIDTH, trackY + SLIDER_HEIGHT, 0x99515760);
         int knobX = sliderXForValue(cycleLengthTicks);
-        context.fill(x, trackY, knobX, trackY + SLIDER_HEIGHT, 0xFF8A939E);
+        context.fill(x, trackY, knobX, trackY + SLIDER_HEIGHT, 0xCCBCC3CA);
         boolean hovered = isSliderHovered(mouseX, mouseY);
-        context.fill(knobX - 5, y - 2, knobX + 5, y + 11, hovered ? 0xFFFFFFFF : 0xFFD8DCE1);
+        context.fill(knobX - 5, y - 2, knobX + 5, y + 11, hovered ? 0xFFFFFFFF : 0xFFE4E7EA);
         context.fill(knobX - 2, y + 1, knobX + 3, y + 8, 0xFF626870);
     }
 
@@ -234,24 +259,24 @@ public final class DayCycleScreen extends Screen {
             int buttonX = x + i * (buttonWidth + gap);
             boolean hover = inside(mouseX, mouseY, buttonX, y, buttonWidth, BUTTON_HEIGHT);
             boolean selected = cycleLengthTicks == PRESET_TICKS[i];
-            int color = selected ? 0xFF59616B : (hover ? 0xFF383D44 : 0xC2292C32);
+            int color = selected ? 0xAA737B84 : (hover ? 0x995B626A : 0x77444A52);
             context.fill(buttonX, y, buttonX + buttonWidth, y + BUTTON_HEIGHT, color);
-            context.fill(buttonX, y, buttonX + buttonWidth, y + 1, selected ? 0xFFC5CBD2 : 0xFF444950);
-            context.drawCenteredTextWithShadow(this.textRenderer, PRESET_LABELS[i], buttonX + buttonWidth / 2, y + 7, 0xFFF0F2F4);
+            context.fill(buttonX, y, buttonX + buttonWidth, y + 1, selected ? 0xFFE0E4E8 : 0x889AA1A9);
+            context.drawCenteredTextWithShadow(MinecraftClient.getInstance().textRenderer, PRESET_LABELS[i], buttonX + buttonWidth / 2, y + 7, 0xFFF4F5F6);
         }
     }
 
     private void drawClockCard(DrawContext context, int x, int y) {
-        context.fill(x, y, x + CLOCK_CARD_WIDTH, y + CLOCK_CARD_HEIGHT, 0x4821262B);
-        context.fill(x, y, x + CLOCK_CARD_WIDTH, y + 1, 0xFF626974);
-        context.fill(x, y + CLOCK_CARD_HEIGHT - 1, x + CLOCK_CARD_WIDTH, y + CLOCK_CARD_HEIGHT, 0xFF3C424A);
-        context.fill(x + 1, y + 1, x + CLOCK_CARD_WIDTH - 1, y + 2, 0x24FFFFFF);
-        drawCenteredText(context, Text.literal("СЕЙЧАС"), x + CLOCK_CARD_WIDTH / 2, y + 10, 0xFFE2E6EA);
+        context.fill(x, y, x + CLOCK_CARD_WIDTH, y + CLOCK_CARD_HEIGHT, 0x62495058);
+        context.fill(x, y, x + CLOCK_CARD_WIDTH, y + 1, 0xFF9AA1AA);
+        context.fill(x, y + CLOCK_CARD_HEIGHT - 1, x + CLOCK_CARD_WIDTH, y + CLOCK_CARD_HEIGHT, 0xFF69717A);
+        context.fill(x + 1, y + 1, x + CLOCK_CARD_WIDTH - 1, y + 2, 0x2AFFFFFF);
+        drawCenteredText(context, Text.literal("СЕЙЧАС"), x + CLOCK_CARD_WIDTH / 2, y + 10, 0xFFEFF1F3);
 
         int clockSize = 28;
         int clockX = x + (CLOCK_CARD_WIDTH - clockSize) / 2;
         int clockY = y + 31;
-        context.fill(clockX - 8, clockY - 8, clockX + clockSize + 8, clockY + clockSize + 8, 0x24FFFFFF);
+        context.fill(clockX - 8, clockY - 8, clockX + clockSize + 8, clockY + clockSize + 8, 0x2AFFFFFF);
 
         context.getMatrices().push();
         context.getMatrices().translate(x + CLOCK_CARD_WIDTH / 2.0f, clockY + clockSize / 2.0f, 0.0f);
@@ -259,100 +284,149 @@ public final class DayCycleScreen extends Screen {
         context.drawItem(new ItemStack(Items.CLOCK), -8, -8);
         context.getMatrices().pop();
 
-        if (this.client != null && this.client.world != null) {
-            long time = Math.floorMod(this.client.world.getTimeOfDay(), 24000L);
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.world != null) {
+            long time = Math.floorMod(client.world.getTimeOfDay(), 24000L);
             drawCenteredText(context, Text.literal(formatMinecraftTime(time)), x + CLOCK_CARD_WIDTH / 2, y + 82, 0xFFFFFFFF);
             drawCenteredText(context, Text.literal(time < 12000L ? "День" : "Ночь"), x + CLOCK_CARD_WIDTH / 2, y + 98, time < 12000L ? 0xFFFFD37C : 0xFFB8C8FF);
         }
 
-        drawCenteredText(context, Text.literal("ванильные часы"), x + CLOCK_CARD_WIDTH / 2, y + CLOCK_CARD_HEIGHT - 17, 0xFF858D97);
+        drawCenteredText(context, Text.literal("ванильные часы"), x + CLOCK_CARD_WIDTH / 2, y + CLOCK_CARD_HEIGHT - 17, 0xFFB1B7BE);
     }
 
-    @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (button != GLFW.GLFW_MOUSE_BUTTON_LEFT) {
-            return super.mouseClicked(mouseX, mouseY, button);
-        }
+    public boolean handleMouseButton(double mouseX, double mouseY, int button, int action) {
+        if (button != GLFW.GLFW_MOUSE_BUTTON_LEFT) return false;
 
-        if (minimized) {
-            if (inside(mouseX, mouseY, miniX, miniY, MINI_PANEL_SIZE, MINI_PANEL_SIZE)) {
-                minimized = false;
-                panelX = miniX;
-                panelY = miniY;
-                clampPanel();
-                playUiSound(1.12f);
+        if (action == GLFW.GLFW_PRESS) {
+            if (minimized) {
+                if (inside(mouseX, mouseY,
+                        miniX - MINI_HITBOX / 2,
+                        miniY - MINI_HITBOX / 2,
+                        MINI_HITBOX,
+                        MINI_HITBOX)) {
+                    miniPressCandidate = true;
+                    draggingMini = false;
+                    miniPressStartX = (int) mouseX;
+                    miniPressStartY = (int) mouseY;
+                    dragOffsetX = miniPressStartX - miniX;
+                    dragOffsetY = miniPressStartY - miniY;
+                    return true;
+                }
+                return false;
+            }
+
+            int x = toLogicalX(mouseX);
+            int y = toLogicalY(mouseY);
+
+            int closeX = panelX + PANEL_WIDTH - 29;
+            int closeY = panelY + 6;
+            if (inside(x, y, closeX, closeY, 22, 22)) {
+                playUiSound(1.15f);
+                close();
                 return true;
             }
-            return true;
+
+            int minimizeX = panelX + PANEL_WIDTH - 57;
+            int minimizeY = panelY + 6;
+            if (inside(x, y, minimizeX, minimizeY, 22, 22)) {
+                miniX = panelX;
+                miniY = panelY;
+                clampMini(MinecraftClient.getInstance().getWindow().getScaledWidth(), MinecraftClient.getInstance().getWindow().getScaledHeight());
+                minimized = true;
+                draggingPanel = false;
+                draggingSlider = false;
+                playUiSound(0.92f);
+                return true;
+            }
+
+            if (inside(x, y, panelX, panelY, PANEL_WIDTH - 64, HEADER_HEIGHT)) {
+                draggingPanel = true;
+                dragOffsetX = (int) mouseX - panelX;
+                dragOffsetY = (int) mouseY - panelY;
+                return true;
+            }
+
+            int sliderX = panelX + 18;
+            int sliderY = panelY + HEADER_HEIGHT + 12 + 52;
+            if (inside(x, y, sliderX - 8, sliderY - 8, SLIDER_WIDTH + 16, 24)) {
+                draggingSlider = true;
+                updateSliderFromMouse(x);
+                playUiSound(1.0f);
+                return true;
+            }
+
+            int presetY = panelY + HEADER_HEIGHT + 12 + 83 + 16;
+            int gap = 4;
+            int buttonWidth = (SLIDER_WIDTH - gap * 4) / 5;
+            for (int i = 0; i < PRESET_TICKS.length; i++) {
+                int buttonX = panelX + 18 + i * (buttonWidth + gap);
+                if (inside(x, y, buttonX, presetY, buttonWidth, BUTTON_HEIGHT)) {
+                    cycleLengthTicks = ModConfig.sanitizeCycleLengthTicks(PRESET_TICKS[i]);
+                    playUiSound(1.05f);
+                    commitCurrentValue();
+                    return true;
+                }
+            }
+
+            // Consume clicks inside the panel so they do not also attack/use blocks.
+            if (inside(x, y, panelX, panelY, PANEL_WIDTH, PANEL_HEIGHT)) return true;
+            return false;
         }
 
-        int x = toLogicalX(mouseX);
-        int y = toLogicalY(mouseY);
+        if (action == GLFW.GLFW_RELEASE) {
+            if (minimized && (miniPressCandidate || draggingMini)) {
+                boolean shouldOpen = miniPressCandidate && !draggingMini;
+                miniPressCandidate = false;
+                draggingMini = false;
+                if (shouldOpen) {
+                    minimized = false;
+                    panelX = miniX;
+                    panelY = miniY;
+                    clampPanel(MinecraftClient.getInstance().getWindow().getScaledWidth(), MinecraftClient.getInstance().getWindow().getScaledHeight());
+                    playUiSound(1.12f);
+                }
+                return true;
+            }
 
-        int closeX = panelX + PANEL_WIDTH - 29;
-        int closeY = panelY + 6;
-        if (inside(x, y, closeX, closeY, 22, 22)) {
-            playUiSound(1.15f);
-            close();
-            return true;
-        }
-
-        int minimizeX = panelX + PANEL_WIDTH - 57;
-        int minimizeY = panelY + 6;
-        if (inside(x, y, minimizeX, minimizeY, 22, 22)) {
-            miniX = panelX;
-            miniY = panelY;
-            clampMini();
-            minimized = true;
+            if (draggingSlider) {
+                commitCurrentValue();
+                playUiSound(1.08f);
+            }
             draggingPanel = false;
             draggingSlider = false;
-            playUiSound(0.92f);
-            return true;
+            return draggingPanel || draggingSlider;
         }
 
-        if (inside(x, y, panelX, panelY, PANEL_WIDTH - 64, HEADER_HEIGHT)) {
-            draggingPanel = true;
-            dragOffsetX = (int) mouseX - panelX;
-            dragOffsetY = (int) mouseY - panelY;
-            return true;
-        }
-
-        int sliderX = panelX + 18;
-        int sliderY = panelY + HEADER_HEIGHT + 12 + 52;
-        if (inside(x, y, sliderX - 8, sliderY - 8, SLIDER_WIDTH + 16, 24)) {
-            draggingSlider = true;
-            updateSliderFromMouse(x);
-            playUiSound(1.0f);
-            return true;
-        }
-
-        int presetY = panelY + HEADER_HEIGHT + 12 + 83 + 16;
-        int gap = 4;
-        int buttonWidth = (SLIDER_WIDTH - gap * 4) / 5;
-        for (int i = 0; i < PRESET_TICKS.length; i++) {
-            int buttonX = panelX + 18 + i * (buttonWidth + gap);
-            if (inside(x, y, buttonX, presetY, buttonWidth, BUTTON_HEIGHT)) {
-                cycleLengthTicks = ModConfig.sanitizeCycleLengthTicks(PRESET_TICKS[i]);
-                playUiSound(1.05f);
-                commitCurrentValue();
-                return true;
-            }
-        }
-
-        return true;
+        return false;
     }
 
-    @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
-        if (button != GLFW.GLFW_MOUSE_BUTTON_LEFT || minimized) return false;
+    public boolean handleMouseMove(double mouseX, double mouseY) {
+        if (minimized && miniPressCandidate) {
+            int dx = (int) mouseX - miniPressStartX;
+            int dy = (int) mouseY - miniPressStartY;
+            if (!draggingMini && dx * dx + dy * dy >= 9) {
+                draggingMini = true;
+            }
+            if (draggingMini) {
+                miniX = (int) mouseX - dragOffsetX;
+                miniY = (int) mouseY - dragOffsetY;
+                int width = MinecraftClient.getInstance().getWindow().getScaledWidth();
+                int height = MinecraftClient.getInstance().getWindow().getScaledHeight();
+                clampMini(width, height);
+                return true;
+            }
+            return true;
+        }
 
         if (draggingPanel) {
             panelX = (int) mouseX - dragOffsetX;
             panelY = (int) mouseY - dragOffsetY;
+            int width = MinecraftClient.getInstance().getWindow().getScaledWidth();
+            int height = MinecraftClient.getInstance().getWindow().getScaledHeight();
+            clampPanel(width, height);
             miniX = panelX;
             miniY = panelY;
-            clampPanel();
-            clampMini();
+            clampMini(width, height);
             return true;
         }
 
@@ -364,28 +438,11 @@ public final class DayCycleScreen extends Screen {
         return false;
     }
 
-    @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
-            if (draggingSlider) {
-                commitCurrentValue();
-                playUiSound(1.08f);
-            }
-            draggingPanel = false;
-            draggingSlider = false;
-        }
-        return true;
-    }
-
-    @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
-        if (minimized) return true;
-
+    public boolean handleMouseScroll(double mouseX, double mouseY, double verticalAmount) {
+        if (minimized) return false;
         int x = toLogicalX(mouseX);
         int y = toLogicalY(mouseY);
-        if (!isSliderHovered(x, y) || verticalAmount == 0.0) {
-            return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
-        }
+        if (!isSliderHovered(x, y) || verticalAmount == 0.0) return false;
 
         long oldValue = cycleLengthTicks;
         int direction = verticalAmount > 0.0 ? 1 : -1;
@@ -421,7 +478,8 @@ public final class DayCycleScreen extends Screen {
     private void commitCurrentValue() {
         cycleLengthTicks = ModConfig.sanitizeCycleLengthTicks(cycleLengthTicks);
         ModConfig.setCycleLengthTicks(cycleLengthTicks);
-        if (this.client != null && this.client.getNetworkHandler() != null) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.getNetworkHandler() != null) {
             ClientPlayNetworking.send(new SetDayCycleLengthPayload((int) cycleLengthTicks));
         }
         savedUntil = System.currentTimeMillis() + 900L;
@@ -470,10 +528,8 @@ public final class DayCycleScreen extends Screen {
     }
 
     private void playUiSound(float pitch) {
-        MinecraftClient client = this.client;
-        if (client != null) {
-            client.getSoundManager().play(PositionedSoundInstance.master(SoundEvents.UI_BUTTON_CLICK.value(), 0.38f, pitch));
-        }
+        MinecraftClient client = MinecraftClient.getInstance();
+        client.getSoundManager().play(PositionedSoundInstance.master(SoundEvents.UI_BUTTON_CLICK.value(), 0.38f, pitch));
     }
 
     private int toLogicalX(double mouseX) {
@@ -492,14 +548,14 @@ public final class DayCycleScreen extends Screen {
         return Math.max(1, Math.round(PANEL_HEIGHT * UI_SCALE));
     }
 
-    private void clampPanel() {
-        panelX = Math.max(6, Math.min(panelX, this.width - visualPanelWidth() - 6));
-        panelY = Math.max(6, Math.min(panelY, this.height - visualPanelHeight() - 6));
+    private void clampPanel(int width, int height) {
+        panelX = Math.max(6, Math.min(panelX, width - visualPanelWidth() - 6));
+        panelY = Math.max(6, Math.min(panelY, height - visualPanelHeight() - 6));
     }
 
-    private void clampMini() {
-        miniX = Math.max(4, Math.min(miniX, this.width - MINI_PANEL_SIZE - 4));
-        miniY = Math.max(4, Math.min(miniY, this.height - MINI_PANEL_SIZE - 4));
+    private void clampMini(int width, int height) {
+        miniX = Math.max(4, Math.min(miniX, width - MINI_PANEL_SIZE - 4));
+        miniY = Math.max(4, Math.min(miniY, height - MINI_PANEL_SIZE - 4));
     }
 
     private static void drawCenteredText(DrawContext context, Text text, int centerX, int y, int color) {
@@ -515,13 +571,12 @@ public final class DayCycleScreen extends Screen {
         return mouseX >= x && mouseX < x + width && mouseY >= y && mouseY < y + height;
     }
 
-    @Override
     public void close() {
-        if (this.client != null) this.client.setScreen(this.parent);
-    }
-
-    @Override
-    public boolean shouldPause() {
-        return false;
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (ACTIVE == this) ACTIVE = null;
+        client.setOverlay(null);
+        if (client.getWindow().isFullscreen() || client.mouse.isCursorLocked()) {
+            client.mouse.lockCursor();
+        }
     }
 }
