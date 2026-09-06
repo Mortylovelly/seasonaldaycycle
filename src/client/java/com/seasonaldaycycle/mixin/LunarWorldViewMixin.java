@@ -10,18 +10,16 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(LunarWorldView.class)
-public interface LunarWorldViewMixin {
+public abstract class LunarWorldViewMixin {
     @Inject(method = "getSkyAngle", at = @At("RETURN"), cancellable = true)
-    default void seasonaldaycycle$interpolateSkyAngle(float tickDelta, CallbackInfoReturnable<Float> cir) {
-        Object self = this;
+    private void seasonaldaycycle$interpolateSkyAngle(float tickDelta, CallbackInfoReturnable<Float> cir) {
+        LunarWorldView lunarWorld = (LunarWorldView) (Object) this;
 
-        if (!(self instanceof World world) || !world.isClient()) {
+        if (!(lunarWorld instanceof World world) || !world.isClient()) {
             return;
         }
 
-        LunarWorldView lunarWorld = (LunarWorldView) self;
         long actualTime = lunarWorld.getLunarTime();
-
         SkyAngleInterpolationState.State state = SkyAngleInterpolationState.get(lunarWorld);
 
         if (!state.initialized) {
