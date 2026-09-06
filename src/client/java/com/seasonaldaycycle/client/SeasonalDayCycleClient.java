@@ -2,21 +2,15 @@ package com.seasonaldaycycle.client;
 
 import com.seasonaldaycycle.ModConfig;
 import com.seasonaldaycycle.network.DayCycleLengthSyncPayload;
-import com.seasonaldaycycle.network.DayCycleNetworking;
-import com.seasonaldaycycle.network.SetDayCycleLengthPayload;
-import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.command.CommandRegistryAccess;
-import net.fabricmc.api.ClientModInitializer;
 
 public final class SeasonalDayCycleClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
-        DayCycleNetworking.initClient();
-
         ClientPlayNetworking.registerGlobalReceiver(DayCycleLengthSyncPayload.ID, (payload, context) -> {
             MinecraftClient client = context.client();
             client.execute(() -> {
