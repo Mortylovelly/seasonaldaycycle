@@ -6,9 +6,9 @@ import com.seasonaldaycycle.network.OpenDayCycleScreenPayload;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
@@ -30,15 +30,15 @@ public final class SeasonalDayCycleClient implements ClientModInitializer {
 
         ClientTickEvents.END_CLIENT_TICK.register(SeasonalDayCycleClient::tick);
 
-        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
-            client.execute(() -> resetForWorldExit(client));
-        });
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) ->
+                client.execute(() -> resetForWorldExit(client)));
 
         ClientPlayNetworking.registerGlobalReceiver(DayCycleLengthSyncPayload.ID, (payload, context) -> {
             MinecraftClient client = context.client();
             client.execute(() -> {
                 long ticks = ModConfig.sanitizeCycleLengthTicks(payload.ticks());
                 knownCycleLengthTicks = ticks;
+                ModConfig.setCycleLengthTicks(ticks);
 
                 DayCycleScreen screen = DayCycleScreen.getActive();
                 if (screen != null) {
@@ -76,7 +76,6 @@ public final class SeasonalDayCycleClient implements ClientModInitializer {
             if (!DayCycleScreen.isActive()) {
                 continue;
             }
-
             setCursorMode(client, !cursorMode);
         }
 
@@ -88,10 +87,9 @@ public final class SeasonalDayCycleClient implements ClientModInitializer {
     private static void resetForWorldExit(MinecraftClient client) {
         DayCycleScreen.resetForWorldExit();
         knownCycleLengthTicks = ModConfig.DEFAULT_CYCLE_LENGTH_TICKS;
+        ModConfig.setCycleLengthTicks(ModConfig.DEFAULT_CYCLE_LENGTH_TICKS);
         cursorMode = false;
-        if (client.mouse != null) {
-            client.mouse.lockCursor();
-        }
+        client.mouse.lockCursor();
     }
 
     public static long getKnownCycleLengthTicks() {
@@ -100,6 +98,7 @@ public final class SeasonalDayCycleClient implements ClientModInitializer {
 
     public static void setKnownCycleLengthTicks(long ticks) {
         knownCycleLengthTicks = ModConfig.sanitizeCycleLengthTicks(ticks);
+        ModConfig.setCycleLengthTicks(knownCycleLengthTicks);
     }
 
     public static boolean isCursorMode() {
