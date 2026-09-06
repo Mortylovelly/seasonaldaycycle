@@ -69,7 +69,7 @@ public final class DayCycleScreen extends Screen {
         this.applyBlur(delta);
         context.fill(0, 0, this.width, this.height, 0x66000000);
 
-        drawPanel(context, mouseX, mouseY);
+        drawPanel(context);
         drawText(context, this.title, panelX + 18, panelY + 14, 0xFFFFFFFF);
         drawCloseButton(context, mouseX, mouseY);
 
@@ -104,7 +104,7 @@ public final class DayCycleScreen extends Screen {
         }
     }
 
-    private void drawPanel(DrawContext context, int mouseX, int mouseY) {
+    private void drawPanel(DrawContext context) {
         context.fill(panelX + 4, panelY + 6, panelX + PANEL_WIDTH + 4, panelY + PANEL_HEIGHT + 6, 0x33000000);
         context.fill(panelX, panelY, panelX + PANEL_WIDTH, panelY + PANEL_HEIGHT, 0xEE191B1F);
         context.fill(panelX + 1, panelY + 1, panelX + PANEL_WIDTH - 1, panelY + HEADER_HEIGHT, 0xF525272C);
@@ -156,7 +156,7 @@ public final class DayCycleScreen extends Screen {
 
         int clockX = x + 18;
         int clockY = y + 30;
-        context.fill(clockX - 6, clockY - 6, clockX + 28, clockY + 28, 0x221FFFFFF);
+        context.fill(clockX - 6, clockY - 6, clockX + 28, clockY + 28, 0x22FFFFFF);
         context.drawItem(new ItemStack(Items.CLOCK), clockX, clockY);
 
         if (this.client != null && this.client.world != null) {
@@ -193,7 +193,6 @@ public final class DayCycleScreen extends Screen {
         if (inside(mouseX, mouseY, sliderX - 8, sliderY - 8, SLIDER_WIDTH + 16, 24)) {
             draggingSlider = true;
             updateSliderFromMouse(mouseX);
-            commitCurrentValue();
             return true;
         }
 
@@ -225,7 +224,6 @@ public final class DayCycleScreen extends Screen {
 
         if (draggingSlider) {
             updateSliderFromMouse(mouseX);
-            commitCurrentValue();
             return true;
         }
 
@@ -235,6 +233,9 @@ public final class DayCycleScreen extends Screen {
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
         if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
+            if (draggingSlider) {
+                commitCurrentValue();
+            }
             draggingPanel = false;
             draggingSlider = false;
         }
@@ -244,11 +245,6 @@ public final class DayCycleScreen extends Screen {
     @Override
     public void tick() {
         super.tick();
-        if (this.client != null && this.client.world != null && !serverSynced) {
-            if (this.client.getNetworkHandler() == null) {
-                serverSynced = true;
-            }
-        }
     }
 
     private void updateSliderFromMouse(double mouseX) {
