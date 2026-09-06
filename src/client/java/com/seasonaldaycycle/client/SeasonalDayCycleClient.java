@@ -15,7 +15,7 @@ public final class SeasonalDayCycleClient implements ClientModInitializer {
             client.execute(() -> {
                 long ticks = ModConfig.sanitizeCycleLengthTicks(payload.ticks());
                 ModConfig.setCycleLengthTicks(ticks);
-                if (client.currentScreen instanceof DayCycleScreen screen) {
+                if (client.overlay instanceof DayCycleScreen screen) {
                     screen.setCycleLengthFromServer(ticks);
                 }
             });
@@ -23,7 +23,12 @@ public final class SeasonalDayCycleClient implements ClientModInitializer {
 
         ClientPlayNetworking.registerGlobalReceiver(OpenDayCycleScreenPayload.ID, (payload, context) -> {
             MinecraftClient client = context.client();
-            client.execute(() -> client.setScreen(new DayCycleScreen(null)));
+            client.execute(() -> {
+                if (!(client.overlay instanceof DayCycleScreen)) {
+                    client.setOverlay(new DayCycleScreen());
+                    client.mouse.unlockCursor();
+                }
+            });
         });
     }
 }
