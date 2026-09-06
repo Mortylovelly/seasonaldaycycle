@@ -10,6 +10,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 public final class ModConfig {
+    public static final long DEFAULT_CYCLE_LENGTH_TICKS = 72000L;
+    public static final long MIN_CYCLE_LENGTH_TICKS = 1200L;
+    public static final long MAX_CYCLE_LENGTH_TICKS = 432000L;
+    public static final long CYCLE_LENGTH_STEP_TICKS = 20L;
+
+    private static final double DEFAULT_TOTAL_BASE_TICKS = 72000.0;
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("seasonaldaycycle.json");
     private static Config values = new Config();
@@ -45,22 +51,43 @@ public final class ModConfig {
         }
     }
 
-    public static double getSpringDayTicks() { return values.spring.dayTicks; }
-    public static double getSpringNightTicks() { return values.spring.nightTicks; }
-    public static double getSummerDayTicks() { return values.summer.dayTicks; }
-    public static double getSummerNightTicks() { return values.summer.nightTicks; }
-    public static double getAutumnDayTicks() { return values.autumn.dayTicks; }
-    public static double getAutumnNightTicks() { return values.autumn.nightTicks; }
-    public static double getWinterDayTicks() { return values.winter.dayTicks; }
-    public static double getWinterNightTicks() { return values.winter.nightTicks; }
+    public static long getCycleLengthTicks() {
+        return values.cycleLengthTicks;
+    }
+
+    public static void setCycleLengthTicks(long ticks) {
+        values.cycleLengthTicks = sanitizeCycleLengthTicks(ticks);
+        save();
+    }
+
+    public static long sanitizeCycleLengthTicks(long ticks) {
+        long clamped = Math.max(MIN_CYCLE_LENGTH_TICKS, Math.min(MAX_CYCLE_LENGTH_TICKS, ticks));
+        long rounded = Math.round((double) clamped / CYCLE_LENGTH_STEP_TICKS) * CYCLE_LENGTH_STEP_TICKS;
+        return Math.max(MIN_CYCLE_LENGTH_TICKS, Math.min(MAX_CYCLE_LENGTH_TICKS, rounded));
+    }
+
+    public static double getCycleScale() {
+        return getCycleLengthTicks() / DEFAULT_TOTAL_BASE_TICKS;
+    }
+
+    public static double getSpringDayTicks() { return 36000.0 * getCycleScale(); }
+    public static double getSpringNightTicks() { return 36000.0 * getCycleScale(); }
+    public static double getSummerDayTicks() { return 42000.0 * getCycleScale(); }
+    public static double getSummerNightTicks() { return 30000.0 * getCycleScale(); }
+    public static double getAutumnDayTicks() { return 36000.0 * getCycleScale(); }
+    public static double getAutumnNightTicks() { return 36000.0 * getCycleScale(); }
+    public static double getWinterDayTicks() { return 30000.0 * getCycleScale(); }
+    public static double getWinterNightTicks() { return 42000.0 * getCycleScale(); }
 
     private static final class Config {
+        long cycleLengthTicks = DEFAULT_CYCLE_LENGTH_TICKS;
         SeasonConfig spring = new SeasonConfig(36000, 36000);
         SeasonConfig summer = new SeasonConfig(42000, 30000);
         SeasonConfig autumn = new SeasonConfig(36000, 36000);
         SeasonConfig winter = new SeasonConfig(30000, 42000);
 
         void sanitize() {
+            cycleLengthTicks = sanitizeCycleLengthTicks(cycleLengthTicks);
             if (spring == null) spring = new SeasonConfig(36000, 36000);
             if (summer == null) summer = new SeasonConfig(42000, 30000);
             if (autumn == null) autumn = new SeasonConfig(36000, 36000);
@@ -72,7 +99,10 @@ public final class ModConfig {
     private static final class SeasonConfig {
         double dayTicks;
         double nightTicks;
-        SeasonConfig(double dayTicks, double nightTicks) { this.dayTicks = dayTicks; this.nightTicks = nightTicks; }
+        SeasonConfig(double dayTicks, double nightTicks) {
+            this.dayTicks = dayTicks;
+            this.nightTicks = nightTicks;
+        }
         void sanitize() {
             if (!Double.isFinite(dayTicks) || dayTicks < 1000) dayTicks = 36000;
             if (!Double.isFinite(nightTicks) || nightTicks < 1000) nightTicks = 36000;
