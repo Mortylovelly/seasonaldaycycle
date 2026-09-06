@@ -47,7 +47,7 @@ public final class SeasonalDayCycleClient implements ClientModInitializer {
             client.execute(() -> {
                 if (!DayCycleScreen.isActive()) {
                     new DayCycleScreen();
-                    setCursorMode(client, true);
+                    setCursorMode(client, false);
                 }
             });
         });
