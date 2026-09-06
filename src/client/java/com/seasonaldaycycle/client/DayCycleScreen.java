@@ -125,7 +125,7 @@ public final class DayCycleScreen extends Screen {
             y += Math.cos(tick * speed * 0.8 + phase) * 6.0;
 
             context.getMatrices().push();
-            context.getMatrices().translate(x, y, 0);
+            context.getMatrices().translate(x, y, 0.0f);
             context.getMatrices().scale(0.55f, 0.55f, 1.0f);
             context.drawItem(new ItemStack(Items.OAK_LEAVES), 0, 0);
             context.getMatrices().pop();
@@ -142,7 +142,7 @@ public final class DayCycleScreen extends Screen {
         context.fill(panelX + 1, panelY + 1, panelX + 2, panelY + PANEL_HEIGHT - 1, 0xFF30343A);
         context.fill(panelX + PANEL_WIDTH - 2, panelY + 1, panelX + PANEL_WIDTH - 1, panelY + PANEL_HEIGHT - 1, 0xFF30343A);
 
-        context.fill(panelX + 12, panelY + HEADER_HEIGHT + 7, panelX + PANEL_WIDTH - 12, panelY + HEADER_HEIGHT + 8, 0x221FFFFFFF);
+        context.fill(panelX + 12, panelY + HEADER_HEIGHT + 7, panelX + PANEL_WIDTH - 12, panelY + HEADER_HEIGHT + 8, 0x12FFFFFF);
     }
 
     private void drawCloseButton(DrawContext context, int mouseX, int mouseY) {
@@ -199,7 +199,7 @@ public final class DayCycleScreen extends Screen {
         context.fill(clockX - 10, clockY - 10, clockX + 42, clockY + 42, 0x18FFFFFF);
 
         context.getMatrices().push();
-        context.getMatrices().translate(clockX + 8, clockY + 8, 0);
+        context.getMatrices().translate(clockX + 8, clockY + 8, 0.0f);
         context.getMatrices().scale(1.75f, 1.75f, 1.0f);
         context.drawItem(new ItemStack(Items.CLOCK), -8, -8);
         context.getMatrices().pop();
@@ -311,8 +311,6 @@ public final class DayCycleScreen extends Screen {
                 playUiSound(direction > 0 ? 1.28f : 1.18f);
                 lastSoundStep = soundStep;
             }
-            savedUntil = 0L;
-            serverSynced = true;
             commitCurrentValue();
         }
 
