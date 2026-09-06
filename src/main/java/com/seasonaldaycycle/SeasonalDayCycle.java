@@ -17,6 +17,6 @@ public class SeasonalDayCycle implements ModInitializer {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
                 DayCycleCommand.register(dispatcher));
 
-        LOGGER.info("[SeasonalDayCycle] Loaded! Day cycle tied to Serene Seasons.");
+        LOGGER.info("[SeasonalDayCycle] Loaded! Serene Seasons integration is optional.");
     }
 }
