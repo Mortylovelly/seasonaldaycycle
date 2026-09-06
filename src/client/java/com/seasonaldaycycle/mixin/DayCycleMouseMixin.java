@@ -11,10 +11,15 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(Mouse.class)
 public abstract class DayCycleMouseMixin {
+    private static final double MINI_FORWARD_OFFSET_X = 21.0;
+    private static final double MINI_FORWARD_OFFSET_Y = 21.0;
+    private boolean seasonaldaycycle$miniInteraction;
+
     @Inject(method = "method_1601", at = @At("HEAD"), cancellable = true, remap = false)
     private void seasonaldaycycle$onMouseButton(long window, int button, int action, int mods, CallbackInfo ci) {
         DayCycleScreen overlay = DayCycleScreen.getActive();
         if (overlay == null) {
+            seasonaldaycycle$miniInteraction = false;
             return;
         }
 
@@ -24,9 +29,46 @@ public abstract class DayCycleMouseMixin {
         double mouseY = client.mouse.getY() / scale;
 
         if (SeasonalDayCycleClient.isCursorMode()) {
-            overlay.handleMouseButton(mouseX, mouseY, button, action);
+            boolean handled = false;
+
+            if (seasonaldaycycle$miniInteraction) {
+                handled = overlay.handleMouseButton(
+                        mouseX - MINI_FORWARD_OFFSET_X,
+                        mouseY - MINI_FORWARD_OFFSET_Y,
+                        button,
+                        action
+                );
+            } else {
+                handled = overlay.handleMouseButton(mouseX, mouseY, button, action);
+
+                // The minimized clock is rendered 21 px to the right/down from
+                // the minimized widget's logical origin. The old click box was
+                // centered on the origin, so most of the visible clock was not
+                // actually clickable. Retry in widget coordinates when the raw
+                // click was not handled.
+                if (!handled && action != 0 && button == 0) {
+                    handled = overlay.handleMouseButton(
+                            mouseX - MINI_FORWARD_OFFSET_X,
+                            mouseY - MINI_FORWARD_OFFSET_Y,
+                            button,
+                            action
+                    );
+                    if (handled) {
+                        seasonaldaycycle$miniInteraction = true;
+                    }
+                }
+            }
+
+            if (action == 0 && seasonaldaycycle$miniInteraction) {
+                seasonaldaycycle$miniInteraction = false;
+            }
+
             client.mouse.unlockCursor();
-            ci.cancel();
+            if (handled) {
+                ci.cancel();
+            } else {
+                ci.cancel();
+            }
             return;
         }
 
@@ -39,6 +81,7 @@ public abstract class DayCycleMouseMixin {
     private void seasonaldaycycle$onCursorPos(long window, double x, double y, CallbackInfo ci) {
         DayCycleScreen overlay = DayCycleScreen.getActive();
         if (overlay == null) {
+            seasonaldaycycle$miniInteraction = false;
             return;
         }
 
@@ -48,9 +91,15 @@ public abstract class DayCycleMouseMixin {
         double scaledY = y / scale;
 
         if (SeasonalDayCycleClient.isCursorMode()) {
-            overlay.handleMouseMove(scaledX, scaledY);
-            // Do not cancel: vanilla must update Mouse.x/Mouse.y so clicks use
-            // the current cursor position. Camera rotation is blocked separately.
+            if (seasonaldaycycle$miniInteraction) {
+                overlay.handleMouseMove(
+                        scaledX - MINI_FORWARD_OFFSET_X,
+                        scaledY - MINI_FORWARD_OFFSET_Y
+                );
+            } else {
+                overlay.handleMouseMove(scaledX, scaledY);
+            }
+            client.mouse.unlockCursor();
             return;
         }
 
