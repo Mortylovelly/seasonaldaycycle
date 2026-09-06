@@ -6,7 +6,6 @@ import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
 import net.minecraft.world.World;
-import sereneseasons.api.season.Season;
 
 public final class DayCycleCommand {
     private DayCycleCommand() {}
@@ -24,9 +23,9 @@ public final class DayCycleCommand {
             return 0;
         }
 
-        Season.SubSeason sub = DayCycleHandler.getCurrentSubSeason(level);
-        double dayTicks = DayCycleHandler.getRealDayTicks(sub);
-        double nightTicks = DayCycleHandler.getRealNightTicks(sub);
+        String subSeason = DayCycleHandler.getCurrentSubSeason(level);
+        double dayTicks = DayCycleHandler.getRealDayTicks(subSeason);
+        double nightTicks = DayCycleHandler.getRealNightTicks(subSeason);
         long timeInDay = Math.floorMod(level.getTimeOfDay(), 24000L);
         boolean isDay = timeInDay < 12000L;
         String phase = isDay ? "День" : "Ночь";
@@ -38,7 +37,7 @@ public final class DayCycleCommand {
         long secLeft = realSecondsLeft % 60;
 
         source.sendFeedback(() -> Text.literal("[SeasonalDayCycle]\n" +
-                "Сезон: " + getSeasonName(sub) + "\n" +
+                "Сезон: " + getSeasonName(subSeason) + "\n" +
                 "Фаза: " + phase + "\n" +
                 "Длина дня: " + formatMinutes(dayTicks) + "\n" +
                 "Длина ночи: " + formatMinutes(nightTicks) + "\n" +
@@ -46,21 +45,21 @@ public final class DayCycleCommand {
         return 1;
     }
 
-    private static String getSeasonName(Season.SubSeason sub) {
-        if (sub == null) return "Неизвестно";
+    private static String getSeasonName(String sub) {
+        if (sub == null) return "Не используется";
         return switch (sub) {
-            case EARLY_SPRING -> "Ранняя весна";
-            case MID_SPRING -> "Середина весны";
-            case LATE_SPRING -> "Поздняя весна";
-            case EARLY_SUMMER -> "Раннее лето";
-            case MID_SUMMER -> "Середина лета";
-            case LATE_SUMMER -> "Позднее лето";
-            case EARLY_AUTUMN -> "Ранняя осень";
-            case MID_AUTUMN -> "Середина осени";
-            case LATE_AUTUMN -> "Поздняя осень";
-            case EARLY_WINTER -> "Ранняя зима";
-            case MID_WINTER -> "Середина зимы";
-            case LATE_WINTER -> "Поздняя зима";
+            case "EARLY_SPRING" -> "Ранняя весна";
+            case "MID_SPRING" -> "Середина весны";
+            case "LATE_SPRING" -> "Поздняя весна";
+            case "EARLY_SUMMER" -> "Раннее лето";
+            case "MID_SUMMER" -> "Середина лета";
+            case "LATE_SUMMER" -> "Позднее лето";
+            case "EARLY_AUTUMN" -> "Ранняя осень";
+            case "MID_AUTUMN" -> "Середина осени";
+            case "LATE_AUTUMN" -> "Поздняя осень";
+            case "EARLY_WINTER" -> "Ранняя зима";
+            case "MID_WINTER" -> "Середина зимы";
+            case "LATE_WINTER" -> "Поздняя зима";
             default -> "Неизвестно";
         };
     }
