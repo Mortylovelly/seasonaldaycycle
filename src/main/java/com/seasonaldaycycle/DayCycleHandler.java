@@ -42,9 +42,10 @@ public final class DayCycleHandler {
         long timeInDay = Math.floorMod(currentTime, VANILLA_CYCLE);
         boolean isDay = timeInDay < VANILLA_DAY_END;
         String subSeason = getCurrentSubSeason(level);
+        long cycleLengthTicks = DayCycleWorldConfig.getCycleLengthTicks(level);
 
-        double realDayTicks = getRealDayTicks(subSeason);
-        double realNightTicks = getRealNightTicks(subSeason);
+        double realDayTicks = getRealDayTicks(subSeason, cycleLengthTicks);
+        double realNightTicks = getRealNightTicks(subSeason, cycleLengthTicks);
         double speed = isDay ? 12000.0 / realDayTicks : 12000.0 / realNightTicks;
 
         state.timeDecimalAccumulator += speed;
@@ -58,12 +59,6 @@ public final class DayCycleHandler {
         state.lastKnownTime = newTime;
     }
 
-    /**
-     * Returns the current Serene Seasons sub-season when Serene Seasons is installed.
-     * Returns null when Serene Seasons is absent or its API cannot be accessed.
-     * Reflection is intentional: Serene Seasons is optional and must not be required
-     * for Seasonal Day Cycle to load or run.
-     */
     public static String getCurrentSubSeason(ServerWorld level) {
         if (!FabricLoader.getInstance().isModLoaded(SERENE_SEASONS_MOD_ID)) {
             return null;
@@ -84,24 +79,32 @@ public final class DayCycleHandler {
     }
 
     public static double getRealDayTicks(String subSeason) {
-        if (subSeason == null) return ModConfig.getSpringDayTicks();
+        return getRealDayTicks(subSeason, ModConfig.getCycleLengthTicks());
+    }
+
+    public static double getRealDayTicks(String subSeason, long cycleLengthTicks) {
+        if (subSeason == null) return ModConfig.getSpringDayTicks(cycleLengthTicks);
         return switch (subSeason) {
-            case "EARLY_SPRING", "MID_SPRING", "LATE_SPRING" -> ModConfig.getSpringDayTicks();
-            case "EARLY_SUMMER", "MID_SUMMER", "LATE_SUMMER" -> ModConfig.getSummerDayTicks();
-            case "EARLY_AUTUMN", "MID_AUTUMN", "LATE_AUTUMN" -> ModConfig.getAutumnDayTicks();
-            case "EARLY_WINTER", "MID_WINTER", "LATE_WINTER" -> ModConfig.getWinterDayTicks();
-            default -> ModConfig.getSpringDayTicks();
+            case "EARLY_SPRING", "MID_SPRING", "LATE_SPRING" -> ModConfig.getSpringDayTicks(cycleLengthTicks);
+            case "EARLY_SUMMER", "MID_SUMMER", "LATE_SUMMER" -> ModConfig.getSummerDayTicks(cycleLengthTicks);
+            case "EARLY_AUTUMN", "MID_AUTUMN", "LATE_AUTUMN" -> ModConfig.getAutumnDayTicks(cycleLengthTicks);
+            case "EARLY_WINTER", "MID_WINTER", "LATE_WINTER" -> ModConfig.getWinterDayTicks(cycleLengthTicks);
+            default -> ModConfig.getSpringDayTicks(cycleLengthTicks);
         };
     }
 
     public static double getRealNightTicks(String subSeason) {
-        if (subSeason == null) return ModConfig.getSpringNightTicks();
+        return getRealNightTicks(subSeason, ModConfig.getCycleLengthTicks());
+    }
+
+    public static double getRealNightTicks(String subSeason, long cycleLengthTicks) {
+        if (subSeason == null) return ModConfig.getSpringNightTicks(cycleLengthTicks);
         return switch (subSeason) {
-            case "EARLY_SPRING", "MID_SPRING", "LATE_SPRING" -> ModConfig.getSpringNightTicks();
-            case "EARLY_SUMMER", "MID_SUMMER", "LATE_SUMMER" -> ModConfig.getSummerNightTicks();
-            case "EARLY_AUTUMN", "MID_AUTUMN", "LATE_AUTUMN" -> ModConfig.getAutumnNightTicks();
-            case "EARLY_WINTER", "MID_WINTER", "LATE_WINTER" -> ModConfig.getWinterNightTicks();
-            default -> ModConfig.getSpringNightTicks();
+            case "EARLY_SPRING", "MID_SPRING", "LATE_SPRING" -> ModConfig.getSpringNightTicks(cycleLengthTicks);
+            case "EARLY_SUMMER", "MID_SUMMER", "LATE_SUMMER" -> ModConfig.getSummerNightTicks(cycleLengthTicks);
+            case "EARLY_AUTUMN", "MID_AUTUMN", "LATE_AUTUMN" -> ModConfig.getAutumnNightTicks(cycleLengthTicks);
+            case "EARLY_WINTER", "MID_WINTER", "LATE_WINTER" -> ModConfig.getWinterNightTicks(cycleLengthTicks);
+            default -> ModConfig.getSpringNightTicks(cycleLengthTicks);
         };
     }
 
