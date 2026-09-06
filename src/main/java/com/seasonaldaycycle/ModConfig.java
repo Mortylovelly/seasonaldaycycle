@@ -1,66 +1,83 @@
 package com.seasonaldaycycle;
 
-import net.minecraftforge.common.ForgeConfigSpec;
-import net.minecraftforge.fml.ModLoadingContext;
-import net.minecraftforge.fml.config.ModConfig.Type;
-import net.minecraftforge.fml.event.config.ModConfigEvent;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import net.fabricmc.loader.api.FabricLoader;
 
-public class ModConfig {
+import java.io.Reader;
+import java.io.Writer;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
-    public static final ForgeConfigSpec SPEC;
+public final class ModConfig {
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("seasonaldaycycle.json");
+    private static Config values = new Config();
 
-    public static ForgeConfigSpec.IntValue SPRING_DAY_TICKS;
-    public static ForgeConfigSpec.IntValue SPRING_NIGHT_TICKS;
-    public static ForgeConfigSpec.IntValue SUMMER_DAY_TICKS;
-    public static ForgeConfigSpec.IntValue SUMMER_NIGHT_TICKS;
-    public static ForgeConfigSpec.IntValue AUTUMN_DAY_TICKS;
-    public static ForgeConfigSpec.IntValue AUTUMN_NIGHT_TICKS;
-    public static ForgeConfigSpec.IntValue WINTER_DAY_TICKS;
-    public static ForgeConfigSpec.IntValue WINTER_NIGHT_TICKS;
+    private ModConfig() {}
 
-    static {
-        ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
-
-        builder.comment("SeasonalDayCycle Configuration",
-            "Values = real ticks (20 TPS) for day or night.",
-            "Summer: longer day. Winter: longer night.");
-
-        builder.push("spring");
-        SPRING_DAY_TICKS   = builder.comment("Real ticks for spring daytime (36000 = 30min)")
-            .defineInRange("day_ticks", 36000, 1000, 500000);
-        SPRING_NIGHT_TICKS = builder.comment("Real ticks for spring nighttime (36000 = 30min)")
-            .defineInRange("night_ticks", 36000, 1000, 500000);
-        builder.pop();
-
-        builder.push("summer");
-        SUMMER_DAY_TICKS   = builder.comment("Real ticks for summer daytime (42000 = 35min)")
-            .defineInRange("day_ticks", 42000, 1000, 500000);
-        SUMMER_NIGHT_TICKS = builder.comment("Real ticks for summer nighttime (30000 = 25min)")
-            .defineInRange("night_ticks", 30000, 1000, 500000);
-        builder.pop();
-
-        builder.push("autumn");
-        AUTUMN_DAY_TICKS   = builder.comment("Real ticks for autumn daytime (36000 = 30min)")
-            .defineInRange("day_ticks", 36000, 1000, 500000);
-        AUTUMN_NIGHT_TICKS = builder.comment("Real ticks for autumn nighttime (36000 = 30min)")
-            .defineInRange("night_ticks", 36000, 1000, 500000);
-        builder.pop();
-
-        builder.push("winter");
-        WINTER_DAY_TICKS   = builder.comment("Real ticks for winter daytime (30000 = 25min)")
-            .defineInRange("day_ticks", 30000, 1000, 500000);
-        WINTER_NIGHT_TICKS = builder.comment("Real ticks for winter nighttime (42000 = 35min)")
-            .defineInRange("night_ticks", 42000, 1000, 500000);
-        builder.pop();
-
-        SPEC = builder.build();
+    public static void load() {
+        try {
+            Files.createDirectories(CONFIG_PATH.getParent());
+            if (Files.exists(CONFIG_PATH)) {
+                try (Reader reader = Files.newBufferedReader(CONFIG_PATH)) {
+                    Config loaded = GSON.fromJson(reader, Config.class);
+                    if (loaded != null) values = loaded;
+                }
+            } else {
+                save();
+            }
+        } catch (Exception exception) {
+            SeasonalDayCycle.LOGGER.error("[SeasonalDayCycle] Failed to load config, using defaults.", exception);
+            values = new Config();
+        }
+        values.sanitize();
     }
 
-    public static void register() {
-        ModLoadingContext.get().registerConfig(Type.SERVER, SPEC, "seasonaldaycycle-server.toml");
+    public static void save() {
+        try {
+            Files.createDirectories(CONFIG_PATH.getParent());
+            try (Writer writer = Files.newBufferedWriter(CONFIG_PATH)) {
+                GSON.toJson(values, writer);
+            }
+        } catch (Exception exception) {
+            SeasonalDayCycle.LOGGER.error("[SeasonalDayCycle] Failed to save config.", exception);
+        }
     }
 
-    public static void onLoad(ModConfigEvent event) {
-        SeasonalDayCycle.LOGGER.info("[SeasonalDayCycle] Config loaded.");
+    public static double getSpringDayTicks() { return values.spring.dayTicks; }
+    public static double getSpringNightTicks() { return values.spring.nightTicks; }
+    public static double getSummerDayTicks() { return values.summer.dayTicks; }
+    public static double getSummerNightTicks() { return values.summer.nightTicks; }
+    public static double getAutumnDayTicks() { return values.autumn.dayTicks; }
+    public static double getAutumnNightTicks() { return values.autumn.nightTicks; }
+    public static double getWinterDayTicks() { return values.winter.dayTicks; }
+    public static double getWinterNightTicks() { return values.winter.nightTicks; }
+
+    private static final class Config {
+        SeasonConfig spring = new SeasonConfig(36000, 36000);
+        SeasonConfig summer = new SeasonConfig(42000, 30000);
+        SeasonConfig autumn = new SeasonConfig(36000, 36000);
+        SeasonConfig winter = new SeasonConfig(30000, 42000);
+
+        void sanitize() {
+            if (spring == null) spring = new SeasonConfig(36000, 36000);
+            if (summer == null) summer = new SeasonConfig(42000, 30000);
+            if (autumn == null) autumn = new SeasonConfig(36000, 36000);
+            if (winter == null) winter = new SeasonConfig(30000, 42000);
+            spring.sanitize(); summer.sanitize(); autumn.sanitize(); winter.sanitize();
+        }
+    }
+
+    private static final class SeasonConfig {
+        double dayTicks;
+        double nightTicks;
+        SeasonConfig(double dayTicks, double nightTicks) { this.dayTicks = dayTicks; this.nightTicks = nightTicks; }
+        void sanitize() {
+            if (!Double.isFinite(dayTicks) || dayTicks < 1000) dayTicks = 36000;
+            if (!Double.isFinite(nightTicks) || nightTicks < 1000) nightTicks = 36000;
+            dayTicks = Math.min(dayTicks, 500000);
+            nightTicks = Math.min(nightTicks, 500000);
+        }
     }
 }
