@@ -3,7 +3,8 @@
   "package": "com.seasonaldaycycle.mixin",
   "compatibilityLevel": "JAVA_21",
   "client": [
-    "LunarWorldViewMixin"
+    "LunarWorldViewMixin",
+    "ClientPlayNetworkHandlerMixin"
   ],
   "injectors": {
     "defaultRequire": 1
