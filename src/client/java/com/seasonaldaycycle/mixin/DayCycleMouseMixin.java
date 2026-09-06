@@ -49,7 +49,8 @@ public abstract class DayCycleMouseMixin {
 
         if (SeasonalDayCycleClient.isCursorMode()) {
             overlay.handleMouseMove(scaledX, scaledY);
-            ci.cancel();
+            // Do not cancel: vanilla must update Mouse.x/Mouse.y so clicks use
+            // the current cursor position. Camera rotation is blocked separately.
             return;
         }
 
@@ -78,6 +79,13 @@ public abstract class DayCycleMouseMixin {
         }
 
         if (overlay.handleMouseScroll(mouseX, mouseY, vertical)) {
+            ci.cancel();
+        }
+    }
+
+    @Inject(method = "method_1606", at = @At("HEAD"), cancellable = true, remap = false)
+    private void seasonaldaycycle$blockCameraRotation(double timeDelta, CallbackInfo ci) {
+        if (DayCycleScreen.isActive() && SeasonalDayCycleClient.isCursorMode()) {
             ci.cancel();
         }
     }
