@@ -20,6 +20,11 @@ public final class DayCycleNetworking {
                 DayCycleLengthSyncPayload.CODEC
         );
 
+        PayloadTypeRegistry.playS2C().register(
+                OpenDayCycleScreenPayload.ID,
+                OpenDayCycleScreenPayload.CODEC
+        );
+
         ServerPlayNetworking.registerGlobalReceiver(SetDayCycleLengthPayload.ID, (payload, context) -> {
             ServerPlayerEntity player = context.player();
             if (player.getServer() == null) return;
@@ -32,8 +37,12 @@ public final class DayCycleNetworking {
             }
 
             ModConfig.setCycleLengthTicks(payload.ticks());
-            ServerPlayNetworking.send(player,
-                    new DayCycleLengthSyncPayload((int) ModConfig.getCycleLengthTicks()));
+            DayCycleLengthSyncPayload sync =
+                    new DayCycleLengthSyncPayload((int) ModConfig.getCycleLengthTicks());
+
+            for (ServerPlayerEntity serverPlayer : player.getServer().getPlayerManager().getPlayerList()) {
+                ServerPlayNetworking.send(serverPlayer, sync);
+            }
         });
 
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
