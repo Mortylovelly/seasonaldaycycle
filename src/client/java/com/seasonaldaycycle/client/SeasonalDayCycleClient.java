@@ -59,8 +59,9 @@ public final class SeasonalDayCycleClient implements ClientModInitializer {
             }
 
             MinecraftClient client = MinecraftClient.getInstance();
-            int mouseX = (int) Math.round(client.mouse.getX());
-            int mouseY = (int) Math.round(client.mouse.getY());
+            double scale = client.getWindow().getScaleFactor();
+            int mouseX = (int) Math.round(client.mouse.getX() / scale);
+            int mouseY = (int) Math.round(client.mouse.getY() / scale);
             screen.renderOverlay(drawContext, mouseX, mouseY, 0.0f);
         });
     }
