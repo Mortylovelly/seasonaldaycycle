@@ -1,6 +1,7 @@
 package com.seasonaldaycycle.mixin;
 
 import com.seasonaldaycycle.client.SkyAngleInterpolationState;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.world.LunarWorldView;
 import net.minecraft.world.World;
@@ -11,56 +12,30 @@ import org.spongepowered.asm.mixin.Overwrite;
 @Mixin(LunarWorldView.class)
 public interface LunarWorldViewMixin {
     /**
-     * Smooths the visual sky position when the server changes the world time
-     * by more than one vanilla tick per server tick.
-     *
-     * @reason The mod's accelerated day/night cycle advances the logical time
-     * in whole ticks, so vanilla interpolation is no longer sufficient.
+     * Uses a fractional visual time for the sky instead of Minecraft's whole-tick
+     * day time. This keeps the logical/server time untouched while making the
+     * sun and moon move continuously between server time updates.
      */
     @Overwrite
     default float getSkyAngle(float tickDelta) {
         LunarWorldView lunarWorld = (LunarWorldView) this;
+        DimensionType dimension = lunarWorld.getDimension();
+
+        if (dimension.hasFixedTime()) {
+            return dimension.getSkyAngle(lunarWorld.getLunarTime());
+        }
 
         if (!(lunarWorld instanceof World world) || !world.isClient()) {
-            long time = lunarWorld.getLunarTime();
-            DimensionType dimension = lunarWorld.getDimension();
-            float current = dimension.getSkyAngle(time);
-            float next = dimension.getSkyAngle(time + 1L);
-            return MathHelper.lerp(tickDelta, current, next);
+            return dimension.getSkyAngle(lunarWorld.getLunarTime());
         }
 
-        long actualTime = lunarWorld.getLunarTime();
-        SkyAngleInterpolationState.State state = SkyAngleInterpolationState.get(lunarWorld);
+        long clientTick = MinecraftClient.getInstance().world == null
+                ? 0L
+                : MinecraftClient.getInstance().world.getTime();
 
-        if (!state.initialized) {
-            state.initialized = true;
-            state.previousTime = actualTime;
-            state.currentTime = actualTime;
-        } else {
-            long rawDifference = actualTime - state.currentTime;
-            long difference = SkyAngleInterpolationState.normalizeDifference(rawDifference);
-
-            if (SkyAngleInterpolationState.isExternalChange(difference)) {
-                state.previousTime = actualTime;
-                state.currentTime = actualTime;
-            } else if (difference != 0L) {
-                state.previousTime = state.currentTime;
-                state.currentTime = actualTime;
-            }
-        }
-
-        DimensionType dimension = world.getDimension();
-        float previousAngle = dimension.getSkyAngle(state.previousTime);
-        float currentAngle = dimension.getSkyAngle(state.currentTime);
-
-        float angleDifference = currentAngle - previousAngle;
-        if (angleDifference > 0.5F) {
-            angleDifference -= 1.0F;
-        } else if (angleDifference < -0.5F) {
-            angleDifference += 1.0F;
-        }
-
-        float smoothAngle = previousAngle + angleDifference * tickDelta;
-        return smoothAngle - (float) Math.floor(smoothAngle);
+        double visualTime = SkyAngleInterpolationState.getVisualTime(lunarWorld, clientTick, tickDelta);
+        double cyclePosition = MathHelper.fractionalPart(visualTime / 24000.0 - 0.25);
+        double smoothing = 0.5 - Math.cos(cyclePosition * Math.PI) / 2.0;
+        return (float) ((cyclePosition * 2.0 + smoothing) / 3.0);
     }
 }
