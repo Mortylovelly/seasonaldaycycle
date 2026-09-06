@@ -485,7 +485,7 @@ public final class DayCycleScreen {
     }
 
     private long sliderMidpointTicks() {
-        return ModConfig.sanitizeCycleLengthTicks(Math.round(Math.sqrt((double) MIN_TICKS * MAX_TICKS) / STEP) * STEP);
+        return 20L * 60L * 20L;
     }
 
     private String formatSpeed() {
@@ -509,8 +509,8 @@ public final class DayCycleScreen {
         long hours = totalSeconds / 3600L;
         long minutes = (totalSeconds % 3600L) / 60L;
         long seconds = totalSeconds % 60L;
-        if (hours > 0L) return hours + " ч" + (minutes > 0L ? " " + minutes + " м" : "");
-        if (minutes > 0L) return minutes + " м";
+        if (hours > 0L) return hours + " ч" + (minutes > 0L ? " " + minutes + " мин" : "");
+        if (minutes > 0L) return minutes + " мин";
         return seconds + " с";
     }
 
