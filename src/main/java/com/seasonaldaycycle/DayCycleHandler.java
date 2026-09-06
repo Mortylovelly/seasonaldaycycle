@@ -1,11 +1,11 @@
 package com.seasonaldaycycle;
 
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.world.GameRules;
 import net.minecraft.world.World;
-import sereneseasons.api.season.Season;
-import sereneseasons.api.season.SeasonHelper;
 
+import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.WeakHashMap;
 
@@ -14,6 +14,9 @@ public final class DayCycleHandler {
     private static final long VANILLA_DAY_END = 12000L;
     private static final long VANILLA_CYCLE = 24000L;
     private static final long EXTERNAL_CHANGE_THRESHOLD = 200L;
+
+    private static final String SERENE_SEASONS_MOD_ID = "sereneseasons";
+    private static final String SEASON_HELPER_CLASS = "sereneseasons.api.season.SeasonHelper";
 
     private DayCycleHandler() {}
 
@@ -38,7 +41,7 @@ public final class DayCycleHandler {
 
         long timeInDay = Math.floorMod(currentTime, VANILLA_CYCLE);
         boolean isDay = timeInDay < VANILLA_DAY_END;
-        Season.SubSeason subSeason = getCurrentSubSeason(level);
+        String subSeason = getCurrentSubSeason(level);
 
         double realDayTicks = getRealDayTicks(subSeason);
         double realNightTicks = getRealNightTicks(subSeason);
@@ -55,32 +58,49 @@ public final class DayCycleHandler {
         state.lastKnownTime = newTime;
     }
 
-    public static Season.SubSeason getCurrentSubSeason(ServerWorld level) {
+    /**
+     * Returns the current Serene Seasons sub-season when Serene Seasons is installed.
+     * Returns null when Serene Seasons is absent or its API cannot be accessed.
+     * Reflection is intentional: Serene Seasons is optional and must not be required
+     * for Seasonal Day Cycle to load or run.
+     */
+    public static String getCurrentSubSeason(ServerWorld level) {
+        if (!FabricLoader.getInstance().isModLoaded(SERENE_SEASONS_MOD_ID)) {
+            return null;
+        }
+
         try {
-            var seasonState = SeasonHelper.getSeasonState(level);
-            if (seasonState != null) return seasonState.getSubSeason();
-        } catch (Exception ignored) {}
-        return Season.SubSeason.MID_SPRING;
+            Class<?> helperClass = Class.forName(SEASON_HELPER_CLASS);
+            Method getSeasonState = helperClass.getMethod("getSeasonState", ServerWorld.class);
+            Object seasonState = getSeasonState.invoke(null, level);
+            if (seasonState == null) return null;
+
+            Method getSubSeason = seasonState.getClass().getMethod("getSubSeason");
+            Object subSeason = getSubSeason.invoke(seasonState);
+            return subSeason == null ? null : subSeason.toString();
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            return null;
+        }
     }
 
-    public static double getRealDayTicks(Season.SubSeason sub) {
-        if (sub == null) return ModConfig.getSpringDayTicks();
-        return switch (sub) {
-            case EARLY_SPRING, MID_SPRING, LATE_SPRING -> ModConfig.getSpringDayTicks();
-            case EARLY_SUMMER, MID_SUMMER, LATE_SUMMER -> ModConfig.getSummerDayTicks();
-            case EARLY_AUTUMN, MID_AUTUMN, LATE_AUTUMN -> ModConfig.getAutumnDayTicks();
-            case EARLY_WINTER, MID_WINTER, LATE_WINTER -> ModConfig.getWinterDayTicks();
+    public static double getRealDayTicks(String subSeason) {
+        if (subSeason == null) return ModConfig.getSpringDayTicks();
+        return switch (subSeason) {
+            case "EARLY_SPRING", "MID_SPRING", "LATE_SPRING" -> ModConfig.getSpringDayTicks();
+            case "EARLY_SUMMER", "MID_SUMMER", "LATE_SUMMER" -> ModConfig.getSummerDayTicks();
+            case "EARLY_AUTUMN", "MID_AUTUMN", "LATE_AUTUMN" -> ModConfig.getAutumnDayTicks();
+            case "EARLY_WINTER", "MID_WINTER", "LATE_WINTER" -> ModConfig.getWinterDayTicks();
             default -> ModConfig.getSpringDayTicks();
         };
     }
 
-    public static double getRealNightTicks(Season.SubSeason sub) {
-        if (sub == null) return ModConfig.getSpringNightTicks();
-        return switch (sub) {
-            case EARLY_SPRING, MID_SPRING, LATE_SPRING -> ModConfig.getSpringNightTicks();
-            case EARLY_SUMMER, MID_SUMMER, LATE_SUMMER -> ModConfig.getSummerNightTicks();
-            case EARLY_AUTUMN, MID_AUTUMN, LATE_AUTUMN -> ModConfig.getAutumnNightTicks();
-            case EARLY_WINTER, MID_WINTER, LATE_WINTER -> ModConfig.getWinterNightTicks();
+    public static double getRealNightTicks(String subSeason) {
+        if (subSeason == null) return ModConfig.getSpringNightTicks();
+        return switch (subSeason) {
+            case "EARLY_SPRING", "MID_SPRING", "LATE_SPRING" -> ModConfig.getSpringNightTicks();
+            case "EARLY_SUMMER", "MID_SUMMER", "LATE_SUMMER" -> ModConfig.getSummerNightTicks();
+            case "EARLY_AUTUMN", "MID_AUTUMN", "LATE_AUTUMN" -> ModConfig.getAutumnNightTicks();
+            case "EARLY_WINTER", "MID_WINTER", "LATE_WINTER" -> ModConfig.getWinterNightTicks();
             default -> ModConfig.getSpringNightTicks();
         };
     }
