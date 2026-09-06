@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(ClientPlayNetworkHandler.class)
 public abstract class ClientPlayNetworkHandlerMixin {
-    @Inject(method = "onWorldTimeUpdate", at = @At("TAIL"))
+    @Inject(method = "method_11079(Lnet/minecraft/class_2761;)V", at = @At("TAIL"))
     private void seasonaldaycycle$captureWorldTime(WorldTimeUpdateS2CPacket packet, CallbackInfo ci) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.world == null) return;
