@@ -102,12 +102,10 @@ public final class DayCycleScreen {
             return;
         }
 
-        int visualWidth = visualPanelWidth();
-        int visualHeight = visualPanelHeight();
-
-        context.enableScissor(panelX, panelY, panelX + visualWidth, panelY + visualHeight);
-        client.gameRenderer.renderBlur(delta);
-
+        // Do not use Minecraft's Screen/Overlay or renderBlur here.
+        // This is a HUD panel, so the world keeps ticking normally and the panel is
+        // rendered directly on the HUD framebuffer. The old blur pass could leave
+        // the HUD render state in a bad state, making only the blurred world visible.
         context.getMatrices().push();
         context.getMatrices().translate(panelX * (1.0f - UI_SCALE), panelY * (1.0f - UI_SCALE), 0.0f);
         context.getMatrices().scale(UI_SCALE, UI_SCALE, 1.0f);
@@ -119,7 +117,6 @@ public final class DayCycleScreen {
         drawContent(context, localMouseX, localMouseY);
 
         context.getMatrices().pop();
-        context.disableScissor();
     }
 
     private void renderMinimized(DrawContext context, int mouseX, int mouseY) {
