@@ -1,5 +1,6 @@
 package com.seasonaldaycycle;
 
+import com.seasonaldaycycle.network.DayCycleNetworking;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
@@ -13,6 +14,7 @@ public class SeasonalDayCycle implements ModInitializer {
     @Override
     public void onInitialize() {
         ModConfig.load();
+        DayCycleNetworking.init();
         ServerTickEvents.END_WORLD_TICK.register(DayCycleHandler::onWorldTick);
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
                 DayCycleCommand.register(dispatcher));
