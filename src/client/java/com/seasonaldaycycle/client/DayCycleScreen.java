@@ -2,7 +2,7 @@ package com.seasonaldaycycle.client;
 
 import com.seasonaldaycycle.ModConfig;
 import com.seasonaldaycycle.network.SetDayCycleLengthPayload;
-import net.fabricmc.api.client.networking.v1.ClientPlayNetworking;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.sound.PositionedSoundInstance;
