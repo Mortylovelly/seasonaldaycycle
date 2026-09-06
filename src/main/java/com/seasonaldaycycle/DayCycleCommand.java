@@ -5,6 +5,7 @@ import com.seasonaldaycycle.network.OpenDayCycleScreenPayload;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
+import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
 import net.minecraft.world.World;
@@ -21,7 +22,7 @@ public final class DayCycleCommand {
     }
 
     private static int executeGui(ServerCommandSource source) {
-        if (!(source.getEntity() instanceof net.minecraft.server.network.ServerPlayerEntity player)) {
+        if (!(source.getEntity() instanceof ServerPlayerEntity player)) {
             source.sendError(Text.literal("[SeasonalDayCycle] Эта команда доступна только игроку."));
             return 0;
         }
@@ -38,9 +39,9 @@ public final class DayCycleCommand {
         }
 
         String subSeason = DayCycleHandler.getCurrentSubSeason(level);
-        double dayTicks = DayCycleHandler.getRealDayTicks(subSeason);
-        double nightTicks = DayCycleHandler.getRealNightTicks(subSeason);
-        long cycleTicks = ModConfig.getCycleLengthTicks();
+        long cycleTicks = DayCycleWorldConfig.getCycleLengthTicks(level);
+        double dayTicks = DayCycleHandler.getRealDayTicks(subSeason, cycleTicks);
+        double nightTicks = DayCycleHandler.getRealNightTicks(subSeason, cycleTicks);
         long timeInDay = Math.floorMod(level.getTimeOfDay(), 24000L);
         boolean isDay = timeInDay < 12000L;
         String phase = isDay ? "День" : "Ночь";
