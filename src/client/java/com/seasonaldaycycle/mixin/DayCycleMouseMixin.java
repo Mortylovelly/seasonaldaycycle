@@ -19,15 +19,18 @@ public abstract class DayCycleMouseMixin {
         }
 
         MinecraftClient client = MinecraftClient.getInstance();
+        double scale = client.getWindow().getScaleFactor();
+        double mouseX = client.mouse.getX() / scale;
+        double mouseY = client.mouse.getY() / scale;
 
         if (SeasonalDayCycleClient.isCursorMode()) {
-            overlay.handleMouseButton(client.mouse.getX(), client.mouse.getY(), button, action);
+            overlay.handleMouseButton(mouseX, mouseY, button, action);
             client.mouse.unlockCursor();
             ci.cancel();
             return;
         }
 
-        if (overlay.handleMouseButton(client.mouse.getX(), client.mouse.getY(), button, action)) {
+        if (overlay.handleMouseButton(mouseX, mouseY, button, action)) {
             ci.cancel();
         }
     }
@@ -39,13 +42,18 @@ public abstract class DayCycleMouseMixin {
             return;
         }
 
+        MinecraftClient client = MinecraftClient.getInstance();
+        double scale = client.getWindow().getScaleFactor();
+        double scaledX = x / scale;
+        double scaledY = y / scale;
+
         if (SeasonalDayCycleClient.isCursorMode()) {
-            overlay.handleMouseMove(x, y);
+            overlay.handleMouseMove(scaledX, scaledY);
             ci.cancel();
             return;
         }
 
-        if (overlay.handleMouseMove(x, y)) {
+        if (overlay.handleMouseMove(scaledX, scaledY)) {
             ci.cancel();
         }
     }
@@ -58,14 +66,18 @@ public abstract class DayCycleMouseMixin {
         }
 
         MinecraftClient client = MinecraftClient.getInstance();
+        double scale = client.getWindow().getScaleFactor();
+        double mouseX = client.mouse.getX() / scale;
+        double mouseY = client.mouse.getY() / scale;
+
         if (SeasonalDayCycleClient.isCursorMode()) {
-            overlay.handleMouseScroll(client.mouse.getX(), client.mouse.getY(), vertical);
+            overlay.handleMouseScroll(mouseX, mouseY, vertical);
             client.mouse.unlockCursor();
             ci.cancel();
             return;
         }
 
-        if (overlay.handleMouseScroll(client.mouse.getX(), client.mouse.getY(), vertical)) {
+        if (overlay.handleMouseScroll(mouseX, mouseY, vertical)) {
             ci.cancel();
         }
     }
