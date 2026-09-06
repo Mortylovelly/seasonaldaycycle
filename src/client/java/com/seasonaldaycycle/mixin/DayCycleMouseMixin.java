@@ -1,6 +1,7 @@
 package com.seasonaldaycycle.mixin;
 
 import com.seasonaldaycycle.client.DayCycleScreen;
+import com.seasonaldaycycle.client.SeasonalDayCycleClient;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.Mouse;
 import org.spongepowered.asm.mixin.Mixin;
@@ -18,6 +19,14 @@ public abstract class DayCycleMouseMixin {
         }
 
         MinecraftClient client = MinecraftClient.getInstance();
+
+        if (SeasonalDayCycleClient.isCursorMode()) {
+            overlay.handleMouseButton(client.mouse.getX(), client.mouse.getY(), button, action);
+            client.mouse.unlockCursor();
+            ci.cancel();
+            return;
+        }
+
         if (overlay.handleMouseButton(client.mouse.getX(), client.mouse.getY(), button, action)) {
             ci.cancel();
         }
@@ -27,6 +36,12 @@ public abstract class DayCycleMouseMixin {
     private void seasonaldaycycle$onCursorPos(long window, double x, double y, CallbackInfo ci) {
         DayCycleScreen overlay = DayCycleScreen.getActive();
         if (overlay == null) {
+            return;
+        }
+
+        if (SeasonalDayCycleClient.isCursorMode()) {
+            overlay.handleMouseMove(x, y);
+            ci.cancel();
             return;
         }
 
@@ -43,6 +58,13 @@ public abstract class DayCycleMouseMixin {
         }
 
         MinecraftClient client = MinecraftClient.getInstance();
+        if (SeasonalDayCycleClient.isCursorMode()) {
+            overlay.handleMouseScroll(client.mouse.getX(), client.mouse.getY(), vertical);
+            client.mouse.unlockCursor();
+            ci.cancel();
+            return;
+        }
+
         if (overlay.handleMouseScroll(client.mouse.getX(), client.mouse.getY(), vertical)) {
             ci.cancel();
         }
