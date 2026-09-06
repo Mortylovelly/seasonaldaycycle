@@ -2,10 +2,9 @@ package com.seasonaldaycycle.client;
 
 import com.seasonaldaycycle.ModConfig;
 import com.seasonaldaycycle.network.SetDayCycleLengthPayload;
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import net.fabricmc.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.Overlay;
 import net.minecraft.client.sound.PositionedSoundInstance;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
@@ -13,7 +12,7 @@ import net.minecraft.sound.SoundEvents;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
 
-public final class DayCycleScreen extends Overlay {
+public final class DayCycleScreen {
     private static final int PANEL_WIDTH = 360;
     private static final int PANEL_HEIGHT = 252;
     private static final int HEADER_HEIGHT = 34;
@@ -89,8 +88,7 @@ public final class DayCycleScreen extends Overlay {
         clampMini(width, height);
     }
 
-    @Override
-    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+    public void renderOverlay(DrawContext context, int mouseX, int mouseY, float delta) {
         MinecraftClient client = MinecraftClient.getInstance();
         int width = client.getWindow().getScaledWidth();
         int height = client.getWindow().getScaledHeight();
@@ -107,7 +105,6 @@ public final class DayCycleScreen extends Overlay {
         int visualWidth = visualPanelWidth();
         int visualHeight = visualPanelHeight();
 
-        // Only the panel area is blurred. The rest of the world remains untouched.
         context.enableScissor(panelX, panelY, panelX + visualWidth, panelY + visualHeight);
         client.gameRenderer.renderBlur(delta);
 
@@ -126,28 +123,13 @@ public final class DayCycleScreen extends Overlay {
     }
 
     private void renderMinimized(DrawContext context, int mouseX, int mouseY) {
-        MinecraftClient client = MinecraftClient.getInstance();
-        boolean hovered = inside(mouseX, mouseY,
-                miniX - MINI_HITBOX / 2,
-                miniY - MINI_HITBOX / 2,
-                MINI_HITBOX,
-                MINI_HITBOX);
-
         int clockX = miniX + (MINI_PANEL_SIZE - 16) / 2;
         int clockY = miniY + (MINI_PANEL_SIZE - 16) / 2;
 
         context.getMatrices().push();
         context.getMatrices().translate(clockX + 8, clockY + 8, 0.0f);
-        context.getMatrices().scale(1.0f, 1.0f, 1.0f);
         context.drawItem(new ItemStack(Items.CLOCK), -8, -8);
         context.getMatrices().pop();
-
-        if (hovered) {
-            context.fill(miniX + 3, miniY + MINI_PANEL_SIZE - 2, miniX + MINI_PANEL_SIZE - 3, miniY + MINI_PANEL_SIZE - 1, 0xAAFFFFFF);
-        }
-
-        // Keep the client referenced here so this method is resilient to resource reloads.
-        if (client.world == null) return;
     }
 
     private void drawContent(DrawContext context, int mouseX, int mouseY) {
@@ -215,7 +197,6 @@ public final class DayCycleScreen extends Overlay {
     }
 
     private void drawPanelGlass(DrawContext context) {
-        // Transparent but strong frosted glass. The world is visible through it.
         context.fill(panelX + 3, panelY + 5, panelX + PANEL_WIDTH + 3, panelY + PANEL_HEIGHT + 5, 0x32000000);
         context.fill(panelX, panelY, panelX + PANEL_WIDTH, panelY + PANEL_HEIGHT, 0x8A666B73);
         context.fill(panelX + 1, panelY + 1, panelX + PANEL_WIDTH - 1, panelY + HEADER_HEIGHT, 0x9B777C84);
@@ -368,7 +349,6 @@ public final class DayCycleScreen extends Overlay {
                 }
             }
 
-            // Consume clicks inside the panel so they do not also attack/use blocks.
             if (inside(x, y, panelX, panelY, PANEL_WIDTH, PANEL_HEIGHT)) return true;
             return false;
         }
@@ -388,13 +368,15 @@ public final class DayCycleScreen extends Overlay {
                 return true;
             }
 
+            boolean wasDraggingPanel = draggingPanel;
+            boolean wasDraggingSlider = draggingSlider;
             if (draggingSlider) {
                 commitCurrentValue();
                 playUiSound(1.08f);
             }
             draggingPanel = false;
             draggingSlider = false;
-            return draggingPanel || draggingSlider;
+            return wasDraggingPanel || wasDraggingSlider;
         }
 
         return false;
@@ -573,9 +555,14 @@ public final class DayCycleScreen extends Overlay {
 
     public void close() {
         MinecraftClient client = MinecraftClient.getInstance();
-        if (ACTIVE == this) ACTIVE = null;
-        client.setOverlay(null);
-        if (client.getWindow().isFullscreen() || client.mouse.isCursorLocked()) {
+        if (ACTIVE == this) {
+            ACTIVE = null;
+        }
+        draggingPanel = false;
+        draggingSlider = false;
+        draggingMini = false;
+        miniPressCandidate = false;
+        if (client.world != null) {
             client.mouse.lockCursor();
         }
     }
