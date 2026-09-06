@@ -7,6 +7,7 @@ import java.util.WeakHashMap;
 
 public final class SkyAngleInterpolationState {
     private static final long DAY_LENGTH = 24000L;
+    private static final double SPEED_TRANSITION_TICKS = 10.0;
 
     private static final Map<LunarWorldView, State> STATES = new WeakHashMap<>();
 
@@ -25,39 +26,46 @@ public final class SkyAngleInterpolationState {
             state.currentServerTime = serverTime;
             state.serverInterval = 20.0;
             state.anchorClientTick = clientTick;
+            state.visualSpeed = getExpectedGameTicksPerClientTick();
+            state.targetSpeed = state.visualSpeed;
             return;
         }
 
         long rawDifference = serverTime - state.currentServerTime;
         long difference = normalizeDifference(rawDifference);
-
         long elapsedClientTicks = clientTick - state.anchorClientTick;
-        if (elapsedClientTicks <= 0L || difference == 0L) {
+
+        if (elapsedClientTicks <= 0L) {
             return;
         }
 
-        // Detect an actual external /time-like jump by comparing the received
-        // movement against the speed expected from the configured real-time cycle.
-        // This keeps high-speed cycles smooth while still snapping true external
-        // time changes instead of animating them as if they were normal progression.
         double expectedPerClientTick = getExpectedGameTicksPerClientTick();
         double expectedDifference = expectedPerClientTick * elapsedClientTicks;
-        boolean looksExternal = expectedDifference > 0.0
-                && (Math.abs(difference) < expectedDifference * 0.35
-                || Math.abs(difference) > expectedDifference * 2.5);
 
-        if (looksExternal && Math.abs(difference) > 200L) {
-            state.previousServerTime = serverTime;
-            state.currentServerTime = serverTime;
-            state.serverInterval = 20.0;
-            state.anchorClientTick = clientTick;
-            return;
+        // At very high speed the server can advance a full 24000-tick day (or more)
+        // between two client time-update packets, so normalized packet differences
+        // can legitimately become 0 or otherwise wrap. In that case use the known
+        // configured cycle speed instead of mistaking the wrap for a teleport.
+        double newTargetSpeed = expectedPerClientTick;
+        boolean packetCanMeasureSpeed = difference != 0L
+                && expectedDifference > 0.0
+                && Math.abs(expectedDifference) < DAY_LENGTH * 0.75
+                && Math.abs(difference) <= DAY_LENGTH / 2L;
+
+        if (packetCanMeasureSpeed) {
+            double observedSpeed = (double) difference / (double) elapsedClientTicks;
+            double lower = Math.max(0.0, expectedPerClientTick * 0.20);
+            double upper = expectedPerClientTick * 5.0;
+            if (observedSpeed >= lower && observedSpeed <= upper) {
+                newTargetSpeed = observedSpeed;
+            }
         }
 
         state.previousServerTime = state.currentServerTime;
         state.currentServerTime = serverTime;
         state.serverInterval = elapsedClientTicks;
         state.anchorClientTick = clientTick;
+        state.targetSpeed = newTargetSpeed;
     }
 
     private static double getExpectedGameTicksPerClientTick() {
@@ -66,8 +74,6 @@ public final class SkyAngleInterpolationState {
             cycleTicks = 72000L;
         }
 
-        // cycleTicks is real client/server ticks for one complete Minecraft day.
-        // 24000 game-time ticks occur during one complete cycle.
         return 24000.0 / cycleTicks;
     }
 
@@ -81,14 +87,17 @@ public final class SkyAngleInterpolationState {
             state.currentServerTime = currentTime;
             state.serverInterval = 20.0;
             state.anchorClientTick = clientTick;
+            state.visualSpeed = getExpectedGameTicksPerClientTick();
+            state.targetSpeed = state.visualSpeed;
         }
 
         double elapsed = Math.max(0.0, (clientTick - state.anchorClientTick) + tickDelta);
-        double speed = 0.0;
+        double progress = Math.min(1.0, elapsed / SPEED_TRANSITION_TICKS);
+        double eased = progress * progress * (3.0 - 2.0 * progress);
+        double speed = state.visualSpeed + (state.targetSpeed - state.visualSpeed) * eased;
 
-        long serverDifference = normalizeDifference(state.currentServerTime - state.previousServerTime);
-        if (state.serverInterval > 0.0) {
-            speed = serverDifference / state.serverInterval;
+        if (progress >= 1.0) {
+            state.visualSpeed = state.targetSpeed;
         }
 
         return state.currentServerTime + elapsed * speed;
@@ -110,5 +119,7 @@ public final class SkyAngleInterpolationState {
         private long currentServerTime;
         private double serverInterval;
         private long anchorClientTick;
+        private double visualSpeed;
+        private double targetSpeed;
     }
 }
