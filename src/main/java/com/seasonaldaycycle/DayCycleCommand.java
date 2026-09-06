@@ -1,6 +1,8 @@
 package com.seasonaldaycycle;
 
 import com.mojang.brigadier.CommandDispatcher;
+import com.seasonaldaycycle.network.OpenDayCycleScreenPayload;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.world.ServerWorld;
@@ -13,7 +15,19 @@ public final class DayCycleCommand {
     public static void register(CommandDispatcher<ServerCommandSource> dispatcher) {
         dispatcher.register(CommandManager.literal("daycycle")
                 .then(CommandManager.literal("info")
-                        .executes(context -> executeInfo(context.getSource()))));
+                        .executes(context -> executeInfo(context.getSource())))
+                .then(CommandManager.literal("gui")
+                        .executes(context -> executeGui(context.getSource()))));
+    }
+
+    private static int executeGui(ServerCommandSource source) {
+        if (!(source.getEntity() instanceof net.minecraft.server.network.ServerPlayerEntity player)) {
+            source.sendError(Text.literal("[SeasonalDayCycle] Эта команда доступна только игроку."));
+            return 0;
+        }
+
+        ServerPlayNetworking.send(player, new OpenDayCycleScreenPayload());
+        return 1;
     }
 
     private static int executeInfo(ServerCommandSource source) {
