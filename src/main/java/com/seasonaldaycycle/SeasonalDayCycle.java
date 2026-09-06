@@ -1,27 +1,21 @@
 package com.seasonaldaycycle;
 
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
-import net.minecraftforge.fml.loading.FMLEnvironment;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-@Mod("seasonaldaycycle")
-public class SeasonalDayCycle {
-
+public class SeasonalDayCycle implements ModInitializer {
     public static final String MODID = "seasonaldaycycle";
-    public static final Logger LOGGER = LogManager.getLogger();
+    public static final Logger LOGGER = LoggerFactory.getLogger(MODID);
 
-    public SeasonalDayCycle() {
-        ModConfig.register();
-        FMLJavaModLoadingContext.get().getModEventBus().addListener(ModConfig::onLoad);
-        MinecraftForge.EVENT_BUS.register(new DayCycleHandler());
-
-        if (FMLEnvironment.dist == Dist.CLIENT) {
-            MinecraftForge.EVENT_BUS.register(new ClientEventHandler());
-        }
+    @Override
+    public void onInitialize() {
+        ModConfig.load();
+        ServerTickEvents.END_WORLD_TICK.register(DayCycleHandler::onWorldTick);
+        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
+                DayCycleCommand.register(dispatcher));
 
         LOGGER.info("[SeasonalDayCycle] Loaded! Day cycle tied to Serene Seasons.");
     }
