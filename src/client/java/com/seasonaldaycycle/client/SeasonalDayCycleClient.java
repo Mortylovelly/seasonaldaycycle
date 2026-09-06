@@ -85,7 +85,11 @@ public final class SeasonalDayCycleClient implements ClientModInitializer {
     }
 
     private static void resetForWorldExit(MinecraftClient client) {
-        DayCycleScreen.resetForWorldExit();
+        DayCycleScreen screen = DayCycleScreen.getActive();
+        if (screen != null) {
+            screen.close();
+        }
+
         knownCycleLengthTicks = ModConfig.DEFAULT_CYCLE_LENGTH_TICKS;
         ModConfig.setCycleLengthTicks(ModConfig.DEFAULT_CYCLE_LENGTH_TICKS);
         cursorMode = false;
