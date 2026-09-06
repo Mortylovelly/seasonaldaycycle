@@ -5,7 +5,8 @@
   "client": [
     "LunarWorldViewMixin",
     "ClientPlayNetworkHandlerMixin",
-    "DayCycleMouseMixin"
+    "DayCycleMouseMixin",
+    "DayCycleOverlayLifecycleMixin"
   ],
   "injectors": {
     "defaultRequire": 1
