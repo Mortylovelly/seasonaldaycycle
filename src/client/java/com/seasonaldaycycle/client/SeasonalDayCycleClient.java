@@ -4,7 +4,8 @@ import com.seasonaldaycycle.ModConfig;
 import com.seasonaldaycycle.network.DayCycleLengthSyncPayload;
 import com.seasonaldaycycle.network.OpenDayCycleScreenPayload;
 import net.fabricmc.api.ClientModInitializer;
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import net.fabricmc.api.ClientPlayNetworking;
+import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.minecraft.client.MinecraftClient;
 
 public final class SeasonalDayCycleClient implements ClientModInitializer {
@@ -27,10 +28,22 @@ public final class SeasonalDayCycleClient implements ClientModInitializer {
             MinecraftClient client = context.client();
             client.execute(() -> {
                 if (!DayCycleScreen.isActive()) {
-                    client.setOverlay(new DayCycleScreen());
+                    new DayCycleScreen();
                     client.mouse.unlockCursor();
                 }
             });
+        });
+
+        HudRenderCallback.EVENT.register((drawContext, tickCounter) -> {
+            DayCycleScreen screen = DayCycleScreen.getActive();
+            if (screen == null) {
+                return;
+            }
+
+            MinecraftClient client = MinecraftClient.getInstance();
+            int mouseX = (int) Math.round(client.mouse.getX());
+            int mouseY = (int) Math.round(client.mouse.getY());
+            screen.renderOverlay(drawContext, mouseX, mouseY, 0.0f);
         });
     }
 }
