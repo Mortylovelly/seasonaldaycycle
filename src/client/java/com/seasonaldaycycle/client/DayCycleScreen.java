@@ -72,6 +72,7 @@ public final class DayCycleScreen extends Screen {
         this.applyBlur(delta);
         context.fill(0, 0, this.width, this.height, 0x52000000);
 
+        context.enableScissor(panelX, panelY, panelX + visualPanelWidth(), panelY + visualPanelHeight());
         context.getMatrices().push();
         context.getMatrices().translate(panelX * (1.0f - UI_SCALE), panelY * (1.0f - UI_SCALE), 0.0f);
         context.getMatrices().scale(UI_SCALE, UI_SCALE, 1.0f);
@@ -83,6 +84,7 @@ public final class DayCycleScreen extends Screen {
         drawContent(context, localMouseX, localMouseY);
 
         context.getMatrices().pop();
+        context.disableScissor();
     }
 
     private void drawContent(DrawContext context, int mouseX, int mouseY) {
@@ -90,29 +92,29 @@ public final class DayCycleScreen extends Screen {
         int right = panelX + PANEL_WIDTH - 18;
         int contentTop = panelY + HEADER_HEIGHT + 12;
 
-        drawText(context, this.title, left, panelY + 11, 0xFFFFFFFF);
-        drawText(context, Text.literal("скорость времени"), left, panelY + 23, 0xFF8E959F);
+        context.drawTextWithShadow(this.textRenderer, this.title, left, panelY + 11, 0xFFFFFFFF);
+        context.drawTextWithShadow(this.textRenderer, Text.literal("скорость времени"), left, panelY + 23, 0xFF8E959F);
         drawCloseButton(context, mouseX, mouseY);
 
-        drawText(context, Text.literal("ПОЛНЫЕ СУТКИ"), left, contentTop, 0xFF9BA2AD);
+        context.drawTextWithShadow(this.textRenderer, Text.literal("ПОЛНЫЕ СУТКИ"), left, contentTop, 0xFF9BA2AD);
         drawCenteredText(context, Text.literal(formatDuration(cycleLengthTicks)), left + 109, contentTop + 16, 0xFFFFFFFF);
         drawCenteredText(context, Text.literal(cycleLengthTicks + " тиков"), left + 109, contentTop + 31, 0xFF777F8A);
 
         int sliderX = left;
         int sliderY = contentTop + 52;
         drawSlider(context, sliderX, sliderY, mouseX, mouseY);
-        drawText(context, Text.literal("1 мин"), sliderX, sliderY + 13, 0xFF737B86);
+        context.drawTextWithShadow(this.textRenderer, Text.literal("1 мин"), sliderX, sliderY + 13, 0xFF737B86);
         drawCenteredText(context, Text.literal("3 ч"), sliderX + SLIDER_WIDTH / 2, sliderY + 13, 0xFF737B86);
         drawRightText(context, Text.literal("6 ч"), sliderX + SLIDER_WIDTH, sliderY + 13, 0xFF737B86);
 
         int presetY = contentTop + 83;
-        drawText(context, Text.literal("БЫСТРЫЙ ВЫБОР"), left, presetY, 0xFF9BA2AD);
+        context.drawTextWithShadow(this.textRenderer, Text.literal("БЫСТРЫЙ ВЫБОР"), left, presetY, 0xFF9BA2AD);
         drawPresetSection(context, left, presetY + 16, mouseX, mouseY);
 
         drawClockCard(context, right - CLOCK_CARD_WIDTH, contentTop);
 
         int infoY = panelY + PANEL_HEIGHT - 34;
-        drawText(context, Text.literal("Скорость: " + formatSpeed()), left, infoY, 0xFFC7CDD5);
+        context.drawTextWithShadow(this.textRenderer, Text.literal("Скорость: " + formatSpeed()), left, infoY, 0xFFC7CDD5);
         drawRightText(context, Text.literal("Пропорции сезонов сохраняются"), right, infoY, 0xFF6F7782);
 
         long now = System.currentTimeMillis();
@@ -128,8 +130,6 @@ public final class DayCycleScreen extends Screen {
         int top = panelY + 2;
         int right = panelX + PANEL_WIDTH - 2;
         int bottom = panelY + PANEL_HEIGHT - 2;
-
-        context.enableScissor(panelX, panelY, panelX + PANEL_WIDTH, panelY + PANEL_HEIGHT);
         long tick = System.currentTimeMillis() / 85L;
 
         for (int i = 0; i < 12; i++) {
@@ -146,8 +146,6 @@ public final class DayCycleScreen extends Screen {
             context.drawItem(new ItemStack(Items.OAK_LEAVES), 0, 0);
             context.getMatrices().pop();
         }
-
-        context.disableScissor();
     }
 
     private void drawPanel(DrawContext context) {
@@ -388,6 +386,15 @@ public final class DayCycleScreen extends Screen {
         if (client != null) {
             client.getSoundManager().play(PositionedSoundInstance.master(SoundEvents.UI_BUTTON_CLICK.value(), 0.38f, pitch));
         }
+    }
+
+    private void drawCenteredText(DrawContext context, Text text, int centerX, int y, int color) {
+        context.drawCenteredTextWithShadow(this.textRenderer, text, centerX, y, color);
+    }
+
+    private void drawRightText(DrawContext context, Text text, int rightX, int y, int color) {
+        int textWidth = this.textRenderer.getWidth(text);
+        context.drawTextWithShadow(this.textRenderer, text, rightX - textWidth, y, color);
     }
 
     private int toLogicalX(double mouseX) {
