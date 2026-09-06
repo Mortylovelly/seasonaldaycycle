@@ -1,6 +1,6 @@
 package com.seasonaldaycycle.network;
 
-import com.seasonaldaycycle.ModConfig;
+import com.seasonaldaycycle.DayCycleWorldConfig;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
@@ -32,13 +32,13 @@ public final class DayCycleNetworking {
             boolean allowed = player.getServer().isSingleplayer() || player.hasPermissionLevel(2);
             if (!allowed) {
                 ServerPlayNetworking.send(player,
-                        new DayCycleLengthSyncPayload((int) ModConfig.getCycleLengthTicks()));
+                        new DayCycleLengthSyncPayload((int) DayCycleWorldConfig.getCycleLengthTicks(player.getServerWorld())));
                 return;
             }
 
-            ModConfig.setCycleLengthTicks(payload.ticks());
-            DayCycleLengthSyncPayload sync =
-                    new DayCycleLengthSyncPayload((int) ModConfig.getCycleLengthTicks());
+            DayCycleWorldConfig.setCycleLengthTicks(player.getServerWorld(), payload.ticks());
+            int ticks = (int) DayCycleWorldConfig.getCycleLengthTicks(player.getServerWorld());
+            DayCycleLengthSyncPayload sync = new DayCycleLengthSyncPayload(ticks);
 
             for (ServerPlayerEntity serverPlayer : player.getServer().getPlayerManager().getPlayerList()) {
                 ServerPlayNetworking.send(serverPlayer, sync);
@@ -47,7 +47,7 @@ public final class DayCycleNetworking {
 
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
             ServerPlayNetworking.send(handler.player,
-                    new DayCycleLengthSyncPayload((int) ModConfig.getCycleLengthTicks()));
+                    new DayCycleLengthSyncPayload((int) DayCycleWorldConfig.getCycleLengthTicks(handler.player.getServerWorld())));
         });
     }
 }
