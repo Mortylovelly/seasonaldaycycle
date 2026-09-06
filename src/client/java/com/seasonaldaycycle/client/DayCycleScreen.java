@@ -40,7 +40,7 @@ public final class DayCycleScreen {
     };
 
     private static final String[] PRESET_LABELS = {
-            "1 сек", "20 мин", "30 мин", "1 час", "6 часов", "24 ч"
+            "1 с", "20 м", "30 м", "1 ч", "6 ч", "24 ч"
     };
 
     private static DayCycleScreen ACTIVE;
@@ -509,8 +509,8 @@ public final class DayCycleScreen {
         long hours = totalSeconds / 3600L;
         long minutes = (totalSeconds % 3600L) / 60L;
         long seconds = totalSeconds % 60L;
-        if (hours > 0L) return hours + " ч" + (minutes > 0L ? " " + minutes + " мин" : "");
-        if (minutes > 0L) return minutes + " мин";
+        if (hours > 0L) return hours + " ч" + (minutes > 0L ? " " + minutes + " м" : "");
+        if (minutes > 0L) return minutes + " м";
         return seconds + " с";
     }
 
