@@ -395,7 +395,7 @@ public final class DayCycleScreen extends Screen {
     private void playUiSound(float pitch) {
         MinecraftClient client = this.client;
         if (client != null) {
-            client.getSoundManager().play(PositionedSoundInstance.master(SoundEvents.UI_BUTTON_CLICK, 0.38f, pitch));
+            client.getSoundManager().play(PositionedSoundInstance.master(SoundEvents.UI_BUTTON_CLICK.value(), 0.38f, pitch));
         }
     }
 
