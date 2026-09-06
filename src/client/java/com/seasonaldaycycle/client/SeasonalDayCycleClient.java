@@ -8,15 +8,16 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
-import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
 
 public final class SeasonalDayCycleClient implements ClientModInitializer {
     private static KeyBinding toggleCursorKey;
     private static boolean cursorMode;
+    private static long knownCycleLengthTicks = ModConfig.DEFAULT_CYCLE_LENGTH_TICKS;
 
     @Override
     public void onInitializeClient() {
@@ -29,11 +30,15 @@ public final class SeasonalDayCycleClient implements ClientModInitializer {
 
         ClientTickEvents.END_CLIENT_TICK.register(SeasonalDayCycleClient::tick);
 
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
+            client.execute(() -> resetForWorldExit(client));
+        });
+
         ClientPlayNetworking.registerGlobalReceiver(DayCycleLengthSyncPayload.ID, (payload, context) -> {
             MinecraftClient client = context.client();
             client.execute(() -> {
                 long ticks = ModConfig.sanitizeCycleLengthTicks(payload.ticks());
-                ModConfig.setCycleLengthTicks(ticks);
+                knownCycleLengthTicks = ticks;
 
                 DayCycleScreen screen = DayCycleScreen.getActive();
                 if (screen != null) {
@@ -47,7 +52,7 @@ public final class SeasonalDayCycleClient implements ClientModInitializer {
             client.execute(() -> {
                 if (!DayCycleScreen.isActive()) {
                     new DayCycleScreen();
-                    setCursorMode(client, false);
+                    setCursorMode(client, true);
                 }
             });
         });
@@ -80,6 +85,23 @@ public final class SeasonalDayCycleClient implements ClientModInitializer {
         }
     }
 
+    private static void resetForWorldExit(MinecraftClient client) {
+        DayCycleScreen.resetForWorldExit();
+        knownCycleLengthTicks = ModConfig.DEFAULT_CYCLE_LENGTH_TICKS;
+        cursorMode = false;
+        if (client.mouse != null) {
+            client.mouse.lockCursor();
+        }
+    }
+
+    public static long getKnownCycleLengthTicks() {
+        return knownCycleLengthTicks;
+    }
+
+    public static void setKnownCycleLengthTicks(long ticks) {
+        knownCycleLengthTicks = ModConfig.sanitizeCycleLengthTicks(ticks);
+    }
+
     public static boolean isCursorMode() {
         return cursorMode;
     }
@@ -91,13 +113,6 @@ public final class SeasonalDayCycleClient implements ClientModInitializer {
             client.mouse.unlockCursor();
         } else if (client.world != null && client.currentScreen == null) {
             client.mouse.lockCursor();
-        }
-
-        if (client.player != null) {
-            client.player.sendMessage(
-                    Text.literal(enabled ? "Курсор: ВКЛ" : "Курсор: ВЫКЛ"),
-                    true
-            );
         }
     }
 }
