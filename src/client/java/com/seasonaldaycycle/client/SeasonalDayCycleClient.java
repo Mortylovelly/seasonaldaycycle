@@ -49,17 +49,11 @@ public final class SeasonalDayCycleClient implements ClientModInitializer {
 
         ClientPlayNetworking.registerGlobalReceiver(OpenDayCycleScreenPayload.ID, (payload, context) -> {
             MinecraftClient client = context.client();
-            client.execute(() -> {
-                if (!DayCycleScreen.isActive()) {
-                    new DayCycleScreen();
-                    setCursorMode(client, true);
-                }
-            });
+            client.execute(() -> VertexPanelController.openMain(client));
         });
 
         HudRenderCallback.EVENT.register((drawContext, tickCounter) -> {
-            DayCycleScreen screen = DayCycleScreen.getActive();
-            if (screen == null) {
+            if (!VertexPanelController.isActive()) {
                 return;
             }
 
@@ -67,27 +61,33 @@ public final class SeasonalDayCycleClient implements ClientModInitializer {
             double scale = client.getWindow().getScaleFactor();
             int mouseX = (int) Math.round(client.mouse.getX() / scale);
             int mouseY = (int) Math.round(client.mouse.getY() / scale);
-            screen.renderOverlay(drawContext, mouseX, mouseY, 0.0f);
+            VertexPanelController.render(drawContext, mouseX, mouseY, 0.0f);
         });
     }
 
     private static void tick(MinecraftClient client) {
         while (toggleCursorKey.wasPressed()) {
-            if (!DayCycleScreen.isActive()) {
+            if (!VertexPanelController.isActive()) {
                 continue;
             }
             setCursorMode(client, !cursorMode);
         }
 
-        if (!DayCycleScreen.isActive() && cursorMode) {
+        VertexPanelController.tick(client);
+
+        if (!VertexPanelController.isActive() && cursorMode) {
             setCursorMode(client, false);
         }
     }
 
     private static void resetForWorldExit(MinecraftClient client) {
-        DayCycleScreen screen = DayCycleScreen.getActive();
-        if (screen != null) {
-            screen.close();
+        if (VertexPanelController.isActive()) {
+            VertexPanelController.close(client);
+        } else {
+            DayCycleScreen screen = DayCycleScreen.getActive();
+            if (screen != null) {
+                screen.close();
+            }
         }
 
         knownCycleLengthTicks = ModConfig.DEFAULT_CYCLE_LENGTH_TICKS;
