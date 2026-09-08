@@ -64,7 +64,7 @@ public final class VertexPanelController {
         currentPage = Page.TIME;
 
         DayCycleScreen screen = new DayCycleScreen();
-        DayCycleScreenMiniAccessor accessor = (DayCycleScreenMiniAccessor) screen;
+        DayCycleScreenMiniAccessor accessor = (DayCycleScreenMiniAccessor) (Object) screen;
         if (miniX >= 0 && miniY >= 0) {
             accessor.seasonaldaycycle$setMiniX(miniX);
             accessor.seasonaldaycycle$setMiniY(miniY);
@@ -105,7 +105,6 @@ public final class VertexPanelController {
     }
 
     public static void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        MinecraftClient client = MinecraftClient.getInstance();
         if (!isActive()) {
             return;
         }
@@ -201,7 +200,7 @@ public final class VertexPanelController {
     }
 
     private static void syncMiniFromTime(DayCycleScreen screen) {
-        DayCycleScreenMiniAccessor accessor = (DayCycleScreenMiniAccessor) screen;
+        DayCycleScreenMiniAccessor accessor = (DayCycleScreenMiniAccessor) (Object) screen;
         miniX = accessor.seasonaldaycycle$getMiniX();
         miniY = accessor.seasonaldaycycle$getMiniY();
     }
