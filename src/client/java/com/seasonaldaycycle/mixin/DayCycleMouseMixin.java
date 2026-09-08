@@ -1,7 +1,7 @@
 package com.seasonaldaycycle.mixin;
 
-import com.seasonaldaycycle.client.DayCycleScreen;
 import com.seasonaldaycycle.client.SeasonalDayCycleClient;
+import com.seasonaldaycycle.client.VertexPanelController;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.Mouse;
 import org.spongepowered.asm.mixin.Mixin;
@@ -19,16 +19,12 @@ public abstract class DayCycleMouseMixin {
     private void seasonaldaycycle$onMouseButton(long window, int button, int action, int mods, CallbackInfo ci) {
         MinecraftClient client = MinecraftClient.getInstance();
 
-        // Never intercept vanilla GUI clicks. The Minecraft pause/menu screens
-        // must keep their normal mouse handling even while our HUD cursor mode
-        // is enabled in the world.
         if (client.currentScreen != null) {
             seasonaldaycycle$miniInteraction = false;
             return;
         }
 
-        DayCycleScreen overlay = DayCycleScreen.getActive();
-        if (overlay == null) {
+        if (!VertexPanelController.isActive()) {
             seasonaldaycycle$miniInteraction = false;
             return;
         }
@@ -41,17 +37,17 @@ public abstract class DayCycleMouseMixin {
             boolean handled;
 
             if (seasonaldaycycle$miniInteraction) {
-                handled = overlay.handleMouseButton(
+                handled = VertexPanelController.handleMouseButton(
                         mouseX - MINI_FORWARD_OFFSET_X,
                         mouseY - MINI_FORWARD_OFFSET_Y,
                         button,
                         action
                 );
             } else {
-                handled = overlay.handleMouseButton(mouseX, mouseY, button, action);
+                handled = VertexPanelController.handleMouseButton(mouseX, mouseY, button, action);
 
                 if (!handled && action == 1 && button == 0) {
-                    handled = overlay.handleMouseButton(
+                    handled = VertexPanelController.handleMouseButton(
                             mouseX - MINI_FORWARD_OFFSET_X,
                             mouseY - MINI_FORWARD_OFFSET_Y,
                             button,
@@ -72,7 +68,7 @@ public abstract class DayCycleMouseMixin {
             return;
         }
 
-        if (overlay.handleMouseButton(mouseX, mouseY, button, action)) {
+        if (VertexPanelController.handleMouseButton(mouseX, mouseY, button, action)) {
             ci.cancel();
         }
     }
@@ -86,8 +82,7 @@ public abstract class DayCycleMouseMixin {
             return;
         }
 
-        DayCycleScreen overlay = DayCycleScreen.getActive();
-        if (overlay == null) {
+        if (!VertexPanelController.isActive()) {
             seasonaldaycycle$miniInteraction = false;
             return;
         }
@@ -98,18 +93,18 @@ public abstract class DayCycleMouseMixin {
 
         if (SeasonalDayCycleClient.isCursorMode()) {
             if (seasonaldaycycle$miniInteraction) {
-                overlay.handleMouseMove(
+                VertexPanelController.handleMouseMove(
                         scaledX - MINI_FORWARD_OFFSET_X,
                         scaledY - MINI_FORWARD_OFFSET_Y
                 );
             } else {
-                overlay.handleMouseMove(scaledX, scaledY);
+                VertexPanelController.handleMouseMove(scaledX, scaledY);
             }
             client.mouse.unlockCursor();
             return;
         }
 
-        if (overlay.handleMouseMove(scaledX, scaledY)) {
+        if (VertexPanelController.handleMouseMove(scaledX, scaledY)) {
             ci.cancel();
         }
     }
@@ -122,8 +117,7 @@ public abstract class DayCycleMouseMixin {
             return;
         }
 
-        DayCycleScreen overlay = DayCycleScreen.getActive();
-        if (overlay == null) {
+        if (!VertexPanelController.isActive()) {
             return;
         }
 
@@ -132,13 +126,14 @@ public abstract class DayCycleMouseMixin {
         double mouseY = client.mouse.getY() / scale;
 
         if (SeasonalDayCycleClient.isCursorMode()) {
-            overlay.handleMouseScroll(mouseX, mouseY, vertical);
-            client.mouse.unlockCursor();
-            ci.cancel();
+            if (VertexPanelController.handleMouseScroll(mouseX, mouseY, vertical)) {
+                client.mouse.unlockCursor();
+                ci.cancel();
+            }
             return;
         }
 
-        if (overlay.handleMouseScroll(mouseX, mouseY, vertical)) {
+        if (VertexPanelController.handleMouseScroll(mouseX, mouseY, vertical)) {
             ci.cancel();
         }
     }
@@ -150,7 +145,7 @@ public abstract class DayCycleMouseMixin {
             return;
         }
 
-        if (DayCycleScreen.isActive() && SeasonalDayCycleClient.isCursorMode()) {
+        if (VertexPanelController.isActive() && SeasonalDayCycleClient.isCursorMode()) {
             ci.cancel();
         }
     }
