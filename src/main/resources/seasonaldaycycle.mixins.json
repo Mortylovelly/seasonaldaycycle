@@ -6,7 +6,8 @@
     "LunarWorldViewMixin",
     "ClientPlayNetworkHandlerMixin",
     "DayCycleMouseMixin",
-    "DayCycleScreenRenderMixin"
+    "DayCycleScreenRenderMixin",
+    "DayCycleScreenMiniAccessor"
   ],
   "injectors": {
     "defaultRequire": 1
