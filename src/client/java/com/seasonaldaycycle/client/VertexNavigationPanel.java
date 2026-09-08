@@ -132,7 +132,7 @@ public final class VertexNavigationPanel {
                 return true;
             }
 
-            if (worldPage && inside(x, y, panelX + 10, panelY + 7, 30, 22)) {
+            if (worldPage && inside(x, y, panelX + 8, panelY + 6, 34, 24)) {
                 VertexPanelController.openMain(client);
                 return true;
             }
@@ -252,9 +252,13 @@ public final class VertexNavigationPanel {
         var renderer = client.textRenderer;
 
         if (worldPage) {
-            context.drawTextWithShadow(renderer, Text.literal("‹"), panelX + 13, panelY + 8, 0xFFE9EDF1);
-            context.drawTextWithShadow(renderer, Text.literal("WORLD"), panelX + 43, panelY + 11, 0xFFFFFFFF);
-            context.drawTextWithShadow(renderer, Text.literal("мир"), panelX + 43, panelY + 23, 0xFFC0C6CD);
+            boolean backHover = inside(mouseX, mouseY, panelX + 8, panelY + 6, 34, 24);
+            context.fill(panelX + 8, panelY + 6, panelX + 42, panelY + 30,
+                    backHover ? 0xCC4A4F57 : 0x66464A51);
+            context.drawCenteredTextWithShadow(renderer, "←", panelX + 25, panelY + 9,
+                    backHover ? 0xFFFFFFFF : 0xFFE9EDF1);
+            context.drawTextWithShadow(renderer, Text.literal("WORLD"), panelX + 50, panelY + 11, 0xFFFFFFFF);
+            context.drawTextWithShadow(renderer, Text.literal("мир"), panelX + 50, panelY + 23, 0xFFC0C6CD);
         } else {
             context.drawTextWithShadow(renderer, Text.literal("Vertex"), panelX + 18, panelY + 9, 0xFFFFFFFF);
             context.drawTextWithShadow(renderer, Text.literal("Universal utility"), panelX + 18, panelY + 22, 0xFFC0C6CD);
