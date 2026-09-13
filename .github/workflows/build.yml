@@ -2,9 +2,9 @@ name: Build Mod
 
 on:
   push:
-    branches: [ main, fabric-1.21.1 ]
+    branches: [ main, fabric-1.21.1, minecraft-1.20.1-fabric ]
   pull_request:
-    branches: [ main, fabric-1.21.1 ]
+    branches: [ main, fabric-1.21.1, minecraft-1.20.1-fabric ]
 
 jobs:
   build:
@@ -12,10 +12,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Setup Java 21
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
+          java-version: '17'
           distribution: 'temurin'
       - name: Build
         run: chmod +x gradlew && ./gradlew build --no-daemon
