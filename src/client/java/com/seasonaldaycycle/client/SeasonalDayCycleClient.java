@@ -33,24 +33,20 @@ public final class SeasonalDayCycleClient implements ClientModInitializer {
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) ->
                 client.execute(() -> resetForWorldExit(client)));
 
-        ClientPlayNetworking.registerGlobalReceiver(DayCycleLengthSyncPayload.ID, (payload, context) -> {
-            MinecraftClient client = context.client();
-            client.execute(() -> {
-                long ticks = ModConfig.sanitizeCycleLengthTicks(payload.ticks());
-                knownCycleLengthTicks = ticks;
-                ModConfig.setCycleLengthTicks(ticks);
+        ClientPlayNetworking.registerGlobalReceiver(DayCycleLengthSyncPayload.TYPE, (payload, player, responseSender) -> {
+            MinecraftClient client = MinecraftClient.getInstance();
+            long ticks = ModConfig.sanitizeCycleLengthTicks(payload.ticks());
+            knownCycleLengthTicks = ticks;
+            ModConfig.setCycleLengthTicks(ticks);
 
-                DayCycleScreen screen = DayCycleScreen.getActive();
-                if (screen != null) {
-                    screen.setCycleLengthFromServer(ticks);
-                }
-            });
+            DayCycleScreen screen = DayCycleScreen.getActive();
+            if (screen != null) {
+                screen.setCycleLengthFromServer(ticks);
+            }
         });
 
-        ClientPlayNetworking.registerGlobalReceiver(OpenDayCycleScreenPayload.ID, (payload, context) -> {
-            MinecraftClient client = context.client();
-            client.execute(() -> VertexPanelController.openMain(client));
-        });
+        ClientPlayNetworking.registerGlobalReceiver(OpenDayCycleScreenPayload.TYPE, (payload, player, responseSender) ->
+                VertexPanelController.openMain(MinecraftClient.getInstance()));
 
         HudRenderCallback.EVENT.register((drawContext, tickCounter) -> {
             if (!VertexPanelController.isActive()) {
