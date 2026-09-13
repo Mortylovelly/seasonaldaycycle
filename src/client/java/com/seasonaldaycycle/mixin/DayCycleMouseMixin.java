@@ -139,7 +139,7 @@ public abstract class DayCycleMouseMixin {
     }
 
     @Inject(method = "method_1606", at = @At("HEAD"), cancellable = true, remap = false)
-    private void seasonaldaycycle$blockCameraRotation(double timeDelta, CallbackInfo ci) {
+    private void seasonaldaycycle$blockCameraRotation(CallbackInfo ci) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.currentScreen != null) {
             return;
