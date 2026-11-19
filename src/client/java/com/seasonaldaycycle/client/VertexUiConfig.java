@@ -80,7 +80,7 @@ public final class VertexUiConfig {
     }
 
     private static final class Values {
-        int version = CONFIG_VERSION;
+        int version = 0;
         float scale = DEFAULT_SCALE;
     }
 }
