@@ -770,6 +770,9 @@ public final class DayCycleScreen {
             boolean wasResizingPanel = resizingPanel;
             boolean wasDraggingSlider = draggingSlider;
             boolean wasDraggingHudScale = draggingHudScale;
+            if (wasResizingPanel) {
+                VertexUiConfig.commitScale();
+            }
             if (draggingSlider) {
                 commitCurrentValue();
                 playUiSound(1.08f);
@@ -811,7 +814,7 @@ public final class DayCycleScreen {
             double verticalDelta = (mouseY - resizeStartMouseY) / (double) Math.max(1, getPanelHeight());
             double scaleDelta = Math.abs(horizontalDelta) >= Math.abs(verticalDelta)
                     ? horizontalDelta : verticalDelta;
-            VertexUiConfig.setScale(resizeStartScale + (float) scaleDelta);
+            VertexUiConfig.previewScale(resizeStartScale + (float) scaleDelta);
             clampPanel(MinecraftClient.getInstance().getWindow().getScaledWidth(),
                     MinecraftClient.getInstance().getWindow().getScaledHeight());
             return true;
@@ -1033,6 +1036,7 @@ public final class DayCycleScreen {
             ACTIVE = null;
         }
         draggingPanel = false;
+        resizingPanel = false;
         draggingSlider = false;
         draggingHudScale = false;
         draggingMini = false;
