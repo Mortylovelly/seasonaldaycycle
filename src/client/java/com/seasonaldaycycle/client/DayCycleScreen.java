@@ -167,12 +167,11 @@ public final class DayCycleScreen {
         int right = panelX + PANEL_WIDTH - 18;
         int contentTop = panelY + HEADER_HEIGHT + 30;
 
-        context.drawTextWithShadow(textRenderer,
-                Text.literal(showHudSettingsPage ? "Настройки HUD" : "Настройки суток"),
-                left, panelY + 11, 0xFFFFFFFF);
-        context.drawTextWithShadow(textRenderer,
-                Text.literal(showHudSettingsPage ? "информация на экране" : "скорость времени"),
-                left, panelY + 23, 0xFFC0C6CD);
+        String panelTitle = showHudSettingsPage
+                ? "Настройки HUD"
+                : showSeasonsPage ? "Календарь и сезоны" : "Настройки суток";
+        context.drawTextWithShadow(textRenderer, Text.literal(panelTitle),
+                panelX + 14, panelY + 9, 0xFFFFFFFF);
         drawMinimizeButton(context, mouseX, mouseY);
         drawCloseButton(context, mouseX, mouseY);
         drawTabs(context, mouseX, mouseY);
