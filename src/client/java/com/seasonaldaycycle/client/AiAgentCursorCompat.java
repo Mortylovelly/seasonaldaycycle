@@ -54,7 +54,7 @@ public final class AiAgentCursorCompat {
 
     /** Uses the exact GLFW-to-scaled-window conversion used by AI Agent's MouseMixin. */
     public static Pointer getScaledPointer(MinecraftClient client) {
-        if (client == null) return new Pointer(0.0, 0.0);
+        if (!shouldHandleInput(client)) return new Pointer(0.0, 0.0);
         Window window = client.getWindow();
         try (MemoryStack stack = MemoryStack.stackPush()) {
             DoubleBuffer cursorX = stack.mallocDouble(1);
