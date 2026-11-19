@@ -69,20 +69,22 @@ public final class VertexHudOverlay {
 
         TextRenderer renderer = client.textRenderer;
         float scale = VertexHudConfig.getScale();
-        int paddingX = Math.max(9, Math.round(10.0f * scale));
-        int paddingY = Math.max(6, Math.round(7.0f * scale));
-        int lineGap = Math.max(3, Math.round(4.0f * scale));
+        int lineGap = 1;
         int firstWidth = renderer.getWidth(firstLine);
         int secondWidth = renderer.getWidth(secondLine);
-        int logicalWidth = Math.max(firstWidth, secondWidth) + paddingX * 2;
-        int logicalHeight = renderer.fontHeight * 2 + lineGap + paddingY * 2;
+        int logicalWidth = Math.max(firstWidth, secondWidth);
+        int logicalHeight = renderer.fontHeight * 2 + lineGap;
 
-        float fitX = Math.max(0.5f, (screenWidth - 12.0f) / Math.max(1.0f, logicalWidth));
-        float fitY = Math.max(0.5f, (screenHeight - 12.0f) / Math.max(1.0f, logicalHeight));
+        // Shrink only as much as needed so neither line can leave the screen,
+        // even at low GUI resolutions or with unusually long localized text.
+        float availableWidth = Math.max(1.0f, screenWidth - 4.0f);
+        float availableHeight = Math.max(1.0f, screenHeight - 4.0f);
+        float fitX = availableWidth / Math.max(1.0f, logicalWidth);
+        float fitY = availableHeight / Math.max(1.0f, logicalHeight);
         float effectiveScale = Math.min(scale, Math.min(fitX, fitY));
         int width = Math.round(logicalWidth * effectiveScale);
         int height = Math.round(logicalHeight * effectiveScale);
-        int margin = 8;
+        int margin = 2;
         int x = switch (VertexHudConfig.getPosition()) {
             case 0, 3 -> margin;
             case 1, 4 -> (screenWidth - width) / 2;
@@ -92,20 +94,15 @@ public final class VertexHudOverlay {
             case 0, 1, 2 -> margin;
             default -> screenHeight - height - margin;
         };
-        x = Math.max(4, Math.min(x, screenWidth - width - 4));
-        y = Math.max(4, Math.min(y, screenHeight - height - 4));
+        x = Math.max(margin, Math.min(x, screenWidth - width - margin));
+        y = Math.max(margin, Math.min(y, screenHeight - height - margin));
 
         context.getMatrices().push();
         context.getMatrices().translate(x, y, 0.0f);
         context.getMatrices().scale(effectiveScale, effectiveScale, 1.0f);
-        context.fill(0, 0, logicalWidth, logicalHeight, 0xB9161A20);
-        context.fill(0, 0, logicalWidth, 1, 0xFFD6DCE3);
-        context.fill(0, logicalHeight - 1, logicalWidth, logicalHeight, 0x885C6672);
-        context.fill(0, 1, 1, logicalHeight - 1, 0x885C6672);
-        context.fill(logicalWidth - 1, 1, logicalWidth, logicalHeight - 1, 0x885C6672);
-        context.drawTextWithShadow(renderer, Text.literal(firstLine), paddingX, paddingY, 0xFFFFFFFF);
+        context.drawTextWithShadow(renderer, Text.literal(firstLine), 0, 0, 0xFFFFFFFF);
         context.drawTextWithShadow(renderer, Text.literal(secondLine),
-                paddingX, paddingY + renderer.fontHeight + lineGap, 0xFFE0E6ED);
+                0, renderer.fontHeight + lineGap, 0xFFE0E6ED);
         context.getMatrices().pop();
     }
 
