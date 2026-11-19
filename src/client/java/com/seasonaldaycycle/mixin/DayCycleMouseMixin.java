@@ -16,7 +16,8 @@ public abstract class DayCycleMouseMixin {
     @Inject(method = "method_1601", at = @At("HEAD"), cancellable = true, remap = false)
     private void seasonaldaycycle$onMouseButton(long window, int button, int action, int modifiers, CallbackInfo ci) {
         MinecraftClient client = MinecraftClient.getInstance();
-        if (client.currentScreen != null || !VertexPanelController.isActive()) return;
+        if (client.currentScreen != null || !VertexPanelController.isActive()
+                || !VertexCursorController.shouldHandleMouseInput()) return;
         VertexCursorController.Pointer pointer = VertexCursorController.getScaledPointer(client);
         VertexPanelController.handleMouseButton(pointer.x(), pointer.y(), button, action);
         if (action == GLFW.GLFW_PRESS || action == GLFW.GLFW_RELEASE) ci.cancel();
@@ -25,7 +26,8 @@ public abstract class DayCycleMouseMixin {
     @Inject(method = "method_1600", at = @At("HEAD"), cancellable = true, remap = false)
     private void seasonaldaycycle$onCursorPos(long window, double cursorX, double cursorY, CallbackInfo ci) {
         MinecraftClient client = MinecraftClient.getInstance();
-        if (client.currentScreen != null || !VertexPanelController.isActive()) return;
+        if (client.currentScreen != null || !VertexPanelController.isActive()
+                || !VertexCursorController.shouldHandleMouseInput()) return;
         VertexCursorController.Pointer pointer = VertexCursorController.toScaledPointer(client, cursorX, cursorY);
         VertexPanelController.handleMouseMove(pointer.x(), pointer.y());
         ci.cancel();
@@ -34,7 +36,8 @@ public abstract class DayCycleMouseMixin {
     @Inject(method = "method_1598", at = @At("HEAD"), cancellable = true, remap = false)
     private void seasonaldaycycle$onMouseScroll(long window, double horizontal, double vertical, CallbackInfo ci) {
         MinecraftClient client = MinecraftClient.getInstance();
-        if (client.currentScreen != null || !VertexPanelController.isActive()) return;
+        if (client.currentScreen != null || !VertexPanelController.isActive()
+                || !VertexCursorController.shouldHandleMouseInput()) return;
         VertexCursorController.Pointer pointer = VertexCursorController.getScaledPointer(client);
         VertexPanelController.handleMouseScroll(pointer.x(), pointer.y(), vertical);
         ci.cancel();
