@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /** Routes UI input through Minecraft AI Agent's G-key free cursor. */
 @Mixin(value = Mouse.class, priority = 1100)
 public abstract class DayCycleMouseMixin {
-    @Inject(method = "onMouseButton", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "method_1601", at = @At("HEAD"), cancellable = true, remap = false)
     private void seasonaldaycycle$onMouseButton(long window, int button, int action, int modifiers, CallbackInfo ci) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.currentScreen != null || !VertexPanelController.isActive()) return;
@@ -24,7 +24,7 @@ public abstract class DayCycleMouseMixin {
         if (action == GLFW.GLFW_PRESS || action == GLFW.GLFW_RELEASE) ci.cancel();
     }
 
-    @Inject(method = "onCursorPos", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "method_1600", at = @At("HEAD"), cancellable = true, remap = false)
     private void seasonaldaycycle$onCursorPos(long window, double cursorX, double cursorY, CallbackInfo ci) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.currentScreen != null || !VertexPanelController.isActive()) return;
@@ -36,7 +36,7 @@ public abstract class DayCycleMouseMixin {
         ci.cancel();
     }
 
-    @Inject(method = "onMouseScroll", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "method_1598", at = @At("HEAD"), cancellable = true, remap = false)
     private void seasonaldaycycle$onMouseScroll(long window, double horizontal, double vertical, CallbackInfo ci) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.currentScreen != null || !VertexPanelController.isActive()) return;
