@@ -2,27 +2,30 @@ package com.seasonaldaycycle.client;
 
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.util.Window;
-import org.lwjgl.glfw.GLFW;
-import org.lwjgl.system.MemoryStack;
 
 import java.lang.reflect.Method;
-import java.nio.DoubleBuffer;
+import java.util.function.Consumer;
 
 /**
- * Read-only bridge to the public cursor state owned by Minecraft AI Agent 0.3.19.
+ * Optional bridge to Minecraft AI Agent 0.3.20's shared mouse event bus.
  *
- * Vertex never unlocks, locks, or toggles the cursor. When AI Agent is absent or its
- * free cursor (G) is disabled, Vertex deliberately does not process pointer input.
+ * Vertex does not install its own Mouse mixin and never changes cursor mode.
+ * AI Agent owns the only Mouse mixin, the G toggle, and scaled pointer coordinates.
  */
 public final class AiAgentCursorCompat {
+    private static final String EVENTS_CLASS = "com.mortylovelly.minecraftai.client.AiCursorEvents";
     private static final String CURSOR_CLASS = "com.mortylovelly.minecraftai.client.AiFreeCursor";
-    private static final Method IS_ENABLED = findEnabledMethod();
+    private static final Method IS_ENABLED = findCursorEnabledMethod();
+
+    private static volatile boolean registered;
+    private static volatile boolean pointerKnown;
+    private static volatile double pointerX;
+    private static volatile double pointerY;
 
     private AiAgentCursorCompat() {
     }
 
-    private static Method findEnabledMethod() {
+    private static Method findCursorEnabledMethod() {
         if (!FabricLoader.getInstance().isModLoaded("minecraft_ai_agent")) return null;
         try {
             return Class.forName(CURSOR_CLASS).getMethod("isEnabled");
@@ -32,7 +35,7 @@ public final class AiAgentCursorCompat {
     }
 
     public static boolean isAvailable() {
-        return IS_ENABLED != null;
+        return IS_ENABLED != null && registered;
     }
 
     public static boolean isEnabled() {
@@ -44,42 +47,51 @@ public final class AiAgentCursorCompat {
         }
     }
 
-    public static boolean shouldHandleInput(MinecraftClient client) {
-        if (!isEnabled() || client == null || client.player == null || client.world == null) {
-            return false;
+    /**
+     * Registers Vertex with the one MouseMixin already owned by AI Agent.
+     * Reflection keeps the AI Agent dependency optional at compile time.
+     */
+    public static void registerPointerHandlers() {
+        if (registered || !FabricLoader.getInstance().isModLoaded("minecraft_ai_agent")) return;
+        try {
+            Class<?> events = Class.forName(EVENTS_CLASS);
+            Method addButton = events.getMethod("addMouseButtonListener", Consumer.class);
+            Method addMove = events.getMethod("addCursorMoveListener", Consumer.class);
+            Method addScroll = events.getMethod("addMouseScrollListener", Consumer.class);
+
+            Consumer<double[]> buttonListener = event -> {
+                if (event == null || event.length < 4 || !VertexPanelController.isActive()) return;
+                VertexPanelController.handleMouseButton(
+                        event[0], event[1], (int) event[2], (int) event[3]);
+            };
+            Consumer<double[]> moveListener = event -> {
+                if (event == null || event.length < 2) return;
+                pointerX = event[0];
+                pointerY = event[1];
+                pointerKnown = true;
+                if (VertexPanelController.isActive()) {
+                    VertexPanelController.handleMouseMove(pointerX, pointerY);
+                }
+            };
+            Consumer<double[]> scrollListener = event -> {
+                if (event == null || event.length < 4 || !VertexPanelController.isActive()) return;
+                VertexPanelController.handleMouseScroll(event[0], event[1], event[3]);
+            };
+
+            addButton.invoke(null, buttonListener);
+            addMove.invoke(null, moveListener);
+            addScroll.invoke(null, scrollListener);
+            registered = true;
+        } catch (ReflectiveOperationException | LinkageError | RuntimeException ignored) {
+            // Missing/older AI Agent means Vertex stays visible but deliberately cannot be clicked.
+            registered = false;
         }
-        long window = client.getWindow().getHandle();
-        return GLFW.glfwGetInputMode(window, GLFW.GLFW_CURSOR) != GLFW.GLFW_CURSOR_DISABLED;
     }
 
-    /** Uses the exact GLFW-to-scaled-window conversion used by AI Agent's MouseMixin. */
+    /** Pointer coordinates are sourced only from AI Agent's MouseMixin events. */
     public static Pointer getScaledPointer(MinecraftClient client) {
-        if (!shouldHandleInput(client)) return new Pointer(0.0, 0.0);
-        Window window = client.getWindow();
-        try (MemoryStack stack = MemoryStack.stackPush()) {
-            DoubleBuffer cursorX = stack.mallocDouble(1);
-            DoubleBuffer cursorY = stack.mallocDouble(1);
-            GLFW.glfwGetCursorPos(window.getHandle(), cursorX, cursorY);
-            return new Pointer(
-                    scaledX(cursorX.get(0), window),
-                    scaledY(cursorY.get(0), window)
-            );
-        }
-    }
-
-    /** Converts a cursor callback's raw GLFW coordinates exactly like AI Agent. */
-    public static Pointer toScaledPointer(MinecraftClient client, double rawX, double rawY) {
-        if (client == null) return new Pointer(0.0, 0.0);
-        Window window = client.getWindow();
-        return new Pointer(scaledX(rawX, window), scaledY(rawY, window));
-    }
-
-    private static double scaledX(double rawX, Window window) {
-        return rawX * window.getScaledWidth() / (double) window.getWidth();
-    }
-
-    private static double scaledY(double rawY, Window window) {
-        return rawY * window.getScaledHeight() / (double) window.getHeight();
+        if (!registered || !isEnabled() || !pointerKnown) return new Pointer(0.0, 0.0);
+        return new Pointer(pointerX, pointerY);
     }
 
     public record Pointer(double x, double y) {
