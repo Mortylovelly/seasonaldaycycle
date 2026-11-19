@@ -24,7 +24,7 @@ public final class DayCycleScreen {
     private static final int BUTTON_HEIGHT = 20;
     private static final int CLOCK_CARD_WIDTH = 104;
     private static final int CLOCK_CARD_HEIGHT = 126;
-    private static final float UI_SCALE = 0.40f;
+    private static final float UI_SCALE = 1.0f;
 
     private static final int MINI_PANEL_SIZE = 42;
     private static final int MINI_HITBOX_PADDING = 8;
@@ -66,6 +66,9 @@ public final class DayCycleScreen {
     private int miniY;
     private boolean minimized;
     private boolean showSeasonsPage;
+    private boolean showHudSettingsPage;
+    private boolean previousPageWasSeasons;
+    private boolean draggingHudScale;
     private String seasonActionMessage = "";
     private long seasonActionUntil;
     private SereneSeasonsCompat.SeasonInfo cachedSeasonInfo = SereneSeasonsCompat.SeasonInfo.unavailable();
@@ -129,7 +132,6 @@ public final class DayCycleScreen {
         int localMouseX = toLogicalX(mouseX);
         int localMouseY = toLogicalY(mouseY);
         drawPanelGlass(context);
-        drawAmbientLeaves(context);
         drawContent(context, localMouseX, localMouseY);
 
         context.getMatrices().pop();
@@ -160,11 +162,23 @@ public final class DayCycleScreen {
         int right = panelX + PANEL_WIDTH - 18;
         int contentTop = panelY + HEADER_HEIGHT + 30;
 
-        context.drawTextWithShadow(textRenderer, Text.literal("Настройки суток"), left, panelY + 11, 0xFFFFFFFF);
-        context.drawTextWithShadow(textRenderer, Text.literal("скорость времени"), left, panelY + 23, 0xFFC0C6CD);
+        context.drawTextWithShadow(textRenderer,
+                Text.literal(showHudSettingsPage ? "Настройки HUD" : "Настройки суток"),
+                left, panelY + 11, 0xFFFFFFFF);
+        context.drawTextWithShadow(textRenderer,
+                Text.literal(showHudSettingsPage ? "информация на экране" : "скорость времени"),
+                left, panelY + 23, 0xFFC0C6CD);
+        context.drawTextWithShadow(textRenderer,
+                Text.literal(AiAgentCursorCompat.isEnabled() ? "G · КУРСОР АКТИВЕН" : "G · НАЖМИ"),
+                panelX + 204, panelY + 11, AiAgentCursorCompat.isEnabled() ? 0xFFBFE9C6 : 0xFFFFDB91);
         drawMinimizeButton(context, mouseX, mouseY);
         drawCloseButton(context, mouseX, mouseY);
         drawTabs(context, mouseX, mouseY);
+
+        if (showHudSettingsPage) {
+            drawHudSettingsContent(context, left, right, contentTop, mouseX, mouseY);
+            return;
+        }
 
         if (showSeasonsPage) {
             drawSeasonContent(context, left, right, contentTop, mouseX, mouseY);
@@ -203,8 +217,13 @@ public final class DayCycleScreen {
     private void drawTabs(DrawContext context, int mouseX, int mouseY) {
         int x = panelX + 18;
         int y = panelY + HEADER_HEIGHT + 5;
-        drawTab(context, x, y, 112, "СУТОЧНЫЙ ЦИКЛ", !showSeasonsPage, inside(mouseX, mouseY, x, y, 112, 20));
-        drawTab(context, x + 118, y, 112, "СЕЗОНЫ", showSeasonsPage, inside(mouseX, mouseY, x + 118, y, 112, 20));
+        int width = 102;
+        drawTab(context, x, y, width, "СУТОЧНЫЙ ЦИКЛ",
+                !showSeasonsPage && !showHudSettingsPage, inside(mouseX, mouseY, x, y, width, 20));
+        drawTab(context, x + 108, y, width, "СЕЗОНЫ",
+                showSeasonsPage, inside(mouseX, mouseY, x + 108, y, width, 20));
+        drawTab(context, x + 216, y, width, "HUD",
+                showHudSettingsPage, inside(mouseX, mouseY, x + 216, y, width, 20));
     }
 
     private void drawTab(DrawContext context, int x, int y, int width, String label, boolean selected, boolean hovered) {
@@ -292,6 +311,88 @@ public final class DayCycleScreen {
         } else {
             drawRightText(context, Text.literal("Смена сезона доступна"), right, panelY + getPanelHeight() - 34, 0xFF9FD0A7);
         }
+    }
+
+
+    private void drawHudSettingsContent(DrawContext context, int left, int right, int contentTop,
+                                        int mouseX, int mouseY) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        var renderer = client.textRenderer;
+        boolean enabled = VertexHudConfig.isEnabled();
+
+        context.drawTextWithShadow(renderer, Text.literal("ОТОБРАЖЕНИЕ ИНФОРМАЦИИ"),
+                left, contentTop, 0xFFD0D5DB);
+
+        int toggleX = right - 116;
+        int toggleY = contentTop + 17;
+        boolean toggleHover = inside(mouseX, mouseY, toggleX, toggleY, 116, 24);
+        context.fill(toggleX, toggleY, toggleX + 116, toggleY + 24,
+                enabled ? (toggleHover ? 0xCC426A50 : 0xAA355A43)
+                        : (toggleHover ? 0x995B626A : 0x77444A52));
+        context.drawCenteredTextWithShadow(renderer, enabled ? "ВКЛЮЧЕНО" : "ВЫКЛЮЧЕНО",
+                toggleX + 58, toggleY + 8, 0xFFFFFFFF);
+        context.drawTextWithShadow(renderer, Text.literal("Показывать календарь поверх игры"),
+                left, contentTop + 23, 0xFFE2E6EA);
+
+        context.drawTextWithShadow(renderer, Text.literal("ПОЛОЖЕНИЕ НА ЭКРАНЕ"), left, contentTop + 53, 0xFFD0D5DB);
+        String[] positions = {
+                "СВЕРХУ СЛЕВА", "СВЕРХУ ЦЕНТР", "СВЕРХУ СПРАВА",
+                "СНИЗУ СЛЕВА", "СНИЗУ ЦЕНТР", "СНИЗУ СПРАВА"
+        };
+        int buttonWidth = 102;
+        int buttonHeight = 23;
+        int gap = 5;
+        for (int i = 0; i < positions.length; i++) {
+            int column = i % 3;
+            int row = i / 3;
+            int x = left + column * (buttonWidth + gap);
+            int y = contentTop + 69 + row * 28;
+            boolean selected = VertexHudConfig.getPosition() == i;
+            boolean hovered = inside(mouseX, mouseY, x, y, buttonWidth, buttonHeight);
+            context.fill(x, y, x + buttonWidth, y + buttonHeight,
+                    selected ? 0xAA737B84 : (hovered ? 0x995B626A : 0x77444A52));
+            context.fill(x, y, x + buttonWidth, y + 1, selected ? 0xFFE0E4E8 : 0x889AA1A9);
+            context.drawCenteredTextWithShadow(renderer, positions[i], x + buttonWidth / 2, y + 7, 0xFFF4F5F6);
+        }
+
+        context.drawTextWithShadow(renderer, Text.literal("РАЗМЕР ТЕКСТА"),
+                left, contentTop + 128, 0xFFD0D5DB);
+        drawRightText(context, Text.literal(Math.round(VertexHudConfig.getScale() * 100.0f) + "%"),
+                right - 2, contentTop + 128, 0xFFFFFFFF);
+        int scaleX = left + 2;
+        int scaleY = contentTop + 146;
+        int scaleWidth = 250;
+        context.fill(scaleX, scaleY + 3, scaleX + scaleWidth, scaleY + 7, 0x99515760);
+        int knobX = scaleX + Math.round((VertexHudConfig.getScale() - 0.75f) * scaleWidth);
+        context.fill(scaleX, scaleY + 3, knobX, scaleY + 7, 0xCCBCC3CA);
+        boolean scaleHover = inside(mouseX, mouseY, scaleX - 6, scaleY - 4, scaleWidth + 12, 18);
+        context.fill(knobX - 5, scaleY - 1, knobX + 5, scaleY + 13,
+                scaleHover || draggingHudScale ? 0xFFFFFFFF : 0xFFE4E7EA);
+        context.fill(knobX - 2, scaleY + 2, knobX + 3, scaleY + 10, 0xFF626870);
+        context.drawTextWithShadow(renderer, Text.literal("75%"), scaleX, scaleY + 15, 0xFF929AA4);
+        drawRightText(context, Text.literal("175%"), scaleX + scaleWidth, scaleY + 15, 0xFF929AA4);
+
+        context.drawTextWithShadow(renderer, Text.literal("ПРЕДПРОСМОТР"), left, contentTop + 174, 0xFFD0D5DB);
+        int previewY = contentTop + 190;
+        context.fill(left, previewY, right, previewY + 43, 0xAA252A31);
+        context.fill(left, previewY, right, previewY + 1, 0x889AA1A9);
+        context.drawTextWithShadow(renderer, Text.literal("ДЕНЬ 125  •  ЦИКЛ #126  •  ЗИМА"),
+                left + 9, previewY + 8, 0xFFFFFFFF);
+        context.drawTextWithShadow(renderer, Text.literal("ДО СМЕНЫ 17 ДН.  •  13:42  •  ДЕНЬ 25 МИН"),
+                left + 9, previewY + 24, 0xFFE0E6ED);
+
+        int backX = panelX + (PANEL_WIDTH - 112) / 2;
+        int backY = panelY + getPanelHeight() - 34;
+        boolean backHover = inside(mouseX, mouseY, backX, backY, 112, 24);
+        context.fill(backX, backY, backX + 112, backY + 24, backHover ? 0xCC5B626A : 0x88464A51);
+        context.drawCenteredTextWithShadow(renderer, "← НАЗАД", backX + 56, backY + 8, 0xFFFFFFFF);
+    }
+
+    private void updateHudScaleFromMouse(int mouseX) {
+        int sliderX = panelX + 20;
+        int sliderWidth = 250;
+        double normalized = Math.max(0.0, Math.min(1.0, (mouseX - sliderX) / (double) sliderWidth));
+        VertexHudConfig.previewScale((float) (0.75 + normalized));
     }
 
     private static String getSeasonName(int seasonIndex) {
@@ -476,17 +577,79 @@ public final class DayCycleScreen {
             }
 
             int tabY = panelY + HEADER_HEIGHT + 5;
-            if (inside(x, y, panelX + 18, tabY, 112, 20)) {
+            if (inside(x, y, panelX + 18, tabY, 102, 20)) {
+                showHudSettingsPage = false;
                 showSeasonsPage = false;
                 clampPanel(MinecraftClient.getInstance().getWindow().getScaledWidth(), MinecraftClient.getInstance().getWindow().getScaledHeight());
                 playUiSound(1.0f);
                 return true;
             }
-            if (inside(x, y, panelX + 136, tabY, 112, 20)) {
+            if (inside(x, y, panelX + 126, tabY, 102, 20)) {
+                showHudSettingsPage = false;
                 showSeasonsPage = true;
                 clampPanel(MinecraftClient.getInstance().getWindow().getScaledWidth(), MinecraftClient.getInstance().getWindow().getScaledHeight());
                 playUiSound(1.0f);
                 return true;
+            }
+            if (inside(x, y, panelX + 234, tabY, 102, 20)) {
+                previousPageWasSeasons = showSeasonsPage;
+                showHudSettingsPage = true;
+                showSeasonsPage = false;
+                clampPanel(MinecraftClient.getInstance().getWindow().getScaledWidth(), MinecraftClient.getInstance().getWindow().getScaledHeight());
+                playUiSound(1.0f);
+                return true;
+            }
+
+            if (inside(x, y, panelX, panelY, PANEL_WIDTH - 64, HEADER_HEIGHT)) {
+                draggingPanel = true;
+                dragOffsetX = (int) mouseX - panelX;
+                dragOffsetY = (int) mouseY - panelY;
+                return true;
+            }
+
+            if (showHudSettingsPage) {
+                int contentTop = panelY + HEADER_HEIGHT + 30;
+                int toggleX = panelX + PANEL_WIDTH - 18 - 116;
+                int toggleY = contentTop + 17;
+                if (inside(x, y, toggleX, toggleY, 116, 24)) {
+                    VertexHudConfig.setEnabled(!VertexHudConfig.isEnabled());
+                    playUiSound(1.05f);
+                    return true;
+                }
+
+                int buttonWidth = 102;
+                int gap = 5;
+                for (int i = 0; i < 6; i++) {
+                    int buttonX = panelX + 18 + (i % 3) * (buttonWidth + gap);
+                    int buttonY = contentTop + 69 + (i / 3) * 28;
+                    if (inside(x, y, buttonX, buttonY, buttonWidth, 23)) {
+                        VertexHudConfig.setPosition(i);
+                        playUiSound(1.05f);
+                        return true;
+                    }
+                }
+
+                int scaleX = panelX + 20;
+                int scaleY = contentTop + 142;
+                if (inside(x, y, scaleX - 6, scaleY - 4, 262, 18)) {
+                    draggingHudScale = true;
+                    updateHudScaleFromMouse(x);
+                    return true;
+                }
+
+                int backX = panelX + (PANEL_WIDTH - 112) / 2;
+                int backY = panelY + getPanelHeight() - 34;
+                if (inside(x, y, backX, backY, 112, 24)) {
+                    showHudSettingsPage = false;
+                    showSeasonsPage = previousPageWasSeasons;
+                    draggingHudScale = false;
+                    clampPanel(MinecraftClient.getInstance().getWindow().getScaledWidth(), MinecraftClient.getInstance().getWindow().getScaledHeight());
+                    playUiSound(1.0f);
+                    return true;
+                }
+
+                if (inside(x, y, panelX, panelY, PANEL_WIDTH, getPanelHeight())) return true;
+                return false;
             }
 
             if (showSeasonsPage) {
@@ -570,13 +733,19 @@ public final class DayCycleScreen {
 
             boolean wasDraggingPanel = draggingPanel;
             boolean wasDraggingSlider = draggingSlider;
+            boolean wasDraggingHudScale = draggingHudScale;
             if (draggingSlider) {
                 commitCurrentValue();
                 playUiSound(1.08f);
             }
+            if (draggingHudScale) {
+                VertexHudConfig.setScale(VertexHudConfig.getScale());
+                playUiSound(1.04f);
+            }
             draggingPanel = false;
             draggingSlider = false;
-            return wasDraggingPanel || wasDraggingSlider;
+            draggingHudScale = false;
+            return wasDraggingPanel || wasDraggingSlider || wasDraggingHudScale;
         }
 
         return false;
@@ -616,15 +785,27 @@ public final class DayCycleScreen {
             updateSliderFromMouse(toLogicalX(mouseX));
             return true;
         }
+        if (draggingHudScale) {
+            updateHudScaleFromMouse(toLogicalX(mouseX));
+            return true;
+        }
 
         return false;
     }
 
     public boolean handleMouseScroll(double mouseX, double mouseY, double verticalAmount) {
-        if (minimized) return false;
+        if (minimized || verticalAmount == 0.0) return false;
         int x = toLogicalX(mouseX);
         int y = toLogicalY(mouseY);
-        if (!isSliderHovered(x, y) || verticalAmount == 0.0) return false;
+        if (showHudSettingsPage) {
+            int sliderX = panelX + 20;
+            int sliderY = panelY + HEADER_HEIGHT + 30 + 142;
+            if (!inside(x, y, sliderX - 6, sliderY - 4, 262, 18)) return false;
+            VertexHudConfig.setScale(VertexHudConfig.getScale() + (verticalAmount > 0.0 ? 0.05f : -0.05f));
+            playUiSound(1.02f);
+            return true;
+        }
+        if (!isSliderHovered(x, y)) return false;
 
         long oldValue = cycleLengthTicks;
         int direction = verticalAmount > 0.0 ? 1 : -1;
@@ -750,7 +931,7 @@ public final class DayCycleScreen {
     }
 
     private int getPanelHeight() {
-        return showSeasonsPage ? SEASON_PANEL_HEIGHT : DAY_PANEL_HEIGHT;
+        return (showSeasonsPage || showHudSettingsPage) ? SEASON_PANEL_HEIGHT : DAY_PANEL_HEIGHT;
     }
 
     private void clampPanel(int width, int height) {
@@ -791,10 +972,9 @@ public final class DayCycleScreen {
         }
         draggingPanel = false;
         draggingSlider = false;
+        draggingHudScale = false;
         draggingMini = false;
         miniPressCandidate = false;
-        if (client.world != null) {
-            client.mouse.lockCursor();
-        }
+        // Cursor capture is exclusively owned by Minecraft AI Agent (G).
     }
 }

@@ -1,14 +1,25 @@
 package com.seasonaldaycycle.client;
 
+import com.seasonaldaycycle.ModConfig;
+import com.seasonaldaycycle.SereneSeasonsCompat;
 import net.minecraft.world.LunarWorldView;
+import net.minecraft.world.World;
 
 import java.util.Map;
 import java.util.WeakHashMap;
 
+/**
+ * Continuous client sky clock driven by the exact configured length of each
+ * phase. Integer time packets are used only for slow phase correction, never
+ * for estimating instantaneous speed (which would oscillate at long cycles).
+ */
 public final class SkyAngleInterpolationState {
-    private static final long DAY_LENGTH = 24000L;
-    private static final double SPEED_TRANSITION_TICKS = 10.0;
-
+    private static final double DAY_LENGTH = 24000.0;
+    private static final double HALF_DAY = 12000.0;
+    private static final double SMALL_PACKET_ERROR = 2.0;
+    private static final double LARGE_PACKET_ERROR = 200.0;
+    private static final int SEASON_REFRESH_TICKS = 20;
+    private static final int CORRECTION_TICKS = 80;
     private static final Map<LunarWorldView, State> STATES = new WeakHashMap<>();
 
     private SkyAngleInterpolationState() {}
@@ -17,109 +28,159 @@ public final class SkyAngleInterpolationState {
         return STATES.computeIfAbsent(world, ignored -> new State());
     }
 
-    public static synchronized void acceptServerTime(LunarWorldView world, long serverTime, long clientTick) {
-        State state = get(world);
-
-        if (!state.initialized) {
-            state.initialized = true;
-            state.previousServerTime = serverTime;
-            state.currentServerTime = serverTime;
-            state.serverInterval = 20.0;
-            state.anchorClientTick = clientTick;
-            state.visualSpeed = getExpectedGameTicksPerClientTick();
-            state.targetSpeed = state.visualSpeed;
-            return;
-        }
-
-        long rawDifference = serverTime - state.currentServerTime;
-        long difference = normalizeDifference(rawDifference);
-        long elapsedClientTicks = clientTick - state.anchorClientTick;
-
-        if (elapsedClientTicks <= 0L) {
-            return;
-        }
-
-        double expectedPerClientTick = getExpectedGameTicksPerClientTick();
-        double expectedDifference = expectedPerClientTick * elapsedClientTicks;
-
-        // At very high speed the server can advance a full 24000-tick day (or more)
-        // between two client time-update packets, so normalized packet differences
-        // can legitimately become 0 or otherwise wrap. In that case use the known
-        // configured cycle speed instead of mistaking the wrap for a teleport.
-        double newTargetSpeed = expectedPerClientTick;
-        boolean packetCanMeasureSpeed = difference != 0L
-                && expectedDifference > 0.0
-                && Math.abs(expectedDifference) < DAY_LENGTH * 0.75
-                && Math.abs(difference) <= DAY_LENGTH / 2L;
-
-        if (packetCanMeasureSpeed) {
-            double observedSpeed = (double) difference / (double) elapsedClientTicks;
-            double lower = Math.max(0.0, expectedPerClientTick * 0.20);
-            double upper = expectedPerClientTick * 5.0;
-            if (observedSpeed >= lower && observedSpeed <= upper) {
-                newTargetSpeed = observedSpeed;
-            }
-        }
-
-        state.previousServerTime = state.currentServerTime;
-        state.currentServerTime = serverTime;
-        state.serverInterval = elapsedClientTicks;
-        state.anchorClientTick = clientTick;
-        state.targetSpeed = newTargetSpeed;
+    public static synchronized void clearAll() {
+        STATES.clear();
     }
 
-    private static double getExpectedGameTicksPerClientTick() {
+    public static synchronized void acceptServerTime(LunarWorldView lunarWorld, long serverTime, long clientTick) {
+        if (!(lunarWorld instanceof World world) || !world.isClient()) return;
+        State state = get(lunarWorld);
+        if (!state.initialized) {
+            initialize(state, serverTime, clientTick, world);
+            return;
+        }
+
+        refreshSeason(state, world, clientTick);
+        advanceWholeTicks(state, clientTick);
+        double error = shortestPhaseDifference(serverTime, state.visualTime);
+
+        // Integer rounding at the network boundary can be almost one game tick.
+        if (Math.abs(error) <= SMALL_PACKET_ERROR) return;
+
+        if (Math.abs(error) >= LARGE_PACKET_ERROR) {
+            // A real /time set or other explicit discontinuity, not normal packet jitter.
+            state.visualTime += error;
+            state.correctionRemaining = 0.0;
+        } else {
+            state.correctionRemaining = error;
+        }
+    }
+
+    public static synchronized double getVisualTime(LunarWorldView lunarWorld, long clientTick, float tickDelta) {
+        State state = get(lunarWorld);
+        if (!(lunarWorld instanceof World world) || !world.isClient()) {
+            return lunarWorld.getLunarTime();
+        }
+        if (!state.initialized) initialize(state, world.getLunarTime(), clientTick, world);
+
+        refreshSeason(state, world, clientTick);
+        advanceWholeTicks(state, clientTick);
+        double partial = Math.max(0.0, Math.min(1.0, tickDelta));
+        return advance(state.visualTime, partial, state.subSeason, SeasonalDayCycleClient.getKnownCycleLengthTicks());
+    }
+
+    private static void initialize(State state, long time, long clientTick, World world) {
+        state.initialized = true;
+        state.visualTime = time;
+        state.lastClientTick = clientTick;
+        state.lastSeasonRefresh = clientTick;
+        state.subSeason = readSubSeason(world);
+        state.correctionRemaining = 0.0;
+    }
+
+    private static void refreshSeason(State state, World world, long clientTick) {
+        if (state.subSeason == null || clientTick - state.lastSeasonRefresh >= SEASON_REFRESH_TICKS) {
+            state.subSeason = readSubSeason(world);
+            state.lastSeasonRefresh = clientTick;
+        }
+    }
+
+    private static String readSubSeason(World world) {
+        SereneSeasonsCompat.SeasonInfo info = SereneSeasonsCompat.getSeasonInfo(world);
+        return info.available() ? info.subSeasonName() : null;
+    }
+
+    private static void advanceWholeTicks(State state, long clientTick) {
+        long elapsed = clientTick - state.lastClientTick;
+        if (elapsed <= 0L) return;
+
         long cycleTicks = SeasonalDayCycleClient.getKnownCycleLengthTicks();
-        if (cycleTicks <= 0L) {
-            cycleTicks = 72000L;
-        }
+        state.visualTime = advance(state.visualTime, elapsed, state.subSeason, cycleTicks);
 
-        return 24000.0 / cycleTicks;
+        if (state.correctionRemaining != 0.0) {
+            double phaseSpeed = getPhaseSpeed(state.visualTime, state.subSeason, cycleTicks);
+            // Keep the sky moving forward; phase corrections must not create a visible reversal.
+            double maxStep = Math.max(0.000001, phaseSpeed * 0.15);
+            double step = Math.max(-maxStep,
+                    Math.min(maxStep, state.correctionRemaining / CORRECTION_TICKS));
+            state.visualTime += step;
+            state.correctionRemaining -= step;
+            if (Math.abs(state.correctionRemaining) < 0.01) state.correctionRemaining = 0.0;
+        }
+        state.lastClientTick = clientTick;
     }
 
-    public static synchronized double getVisualTime(LunarWorldView world, long clientTick, float tickDelta) {
-        State state = get(world);
+    private static double advance(double startTime, double clientTicks, String subSeason, long cycleTicks) {
+        if (clientTicks <= 0.0) return startTime;
+        double time = startTime;
+        double remaining = clientTicks;
 
-        if (!state.initialized) {
-            long currentTime = world.getLunarTime();
-            state.initialized = true;
-            state.previousServerTime = currentTime;
-            state.currentServerTime = currentTime;
-            state.serverInterval = 20.0;
-            state.anchorClientTick = clientTick;
-            state.visualSpeed = getExpectedGameTicksPerClientTick();
-            state.targetSpeed = state.visualSpeed;
+        // At normal settings only one or two boundaries are crossed per tick.
+        // The guard protects against pathological configs with extremely short phases.
+        for (int i = 0; remaining > 1.0E-9 && i < 8192; i++) {
+            double phase = positiveModulo(time, DAY_LENGTH);
+            boolean day = phase < HALF_DAY;
+            double speed = getPhaseSpeed(time, subSeason, cycleTicks);
+            double untilBoundary = day ? (HALF_DAY - phase) / speed : (DAY_LENGTH - phase) / speed;
+
+            if (!Double.isFinite(untilBoundary) || untilBoundary <= 1.0E-9) {
+                time += remaining * averageSpeed(subSeason, cycleTicks);
+                return time;
+            }
+
+            double step = Math.min(remaining, untilBoundary);
+            time += step * speed;
+            remaining -= step;
         }
 
-        double elapsed = Math.max(0.0, (clientTick - state.anchorClientTick) + tickDelta);
-        double progress = Math.min(1.0, elapsed / SPEED_TRANSITION_TICKS);
-        double eased = progress * progress * (3.0 - 2.0 * progress);
-        double speed = state.visualSpeed + (state.targetSpeed - state.visualSpeed) * eased;
+        if (remaining > 1.0E-9) time += remaining * averageSpeed(subSeason, cycleTicks);
+        return time;
+    }
 
-        if (progress >= 1.0) {
-            state.visualSpeed = state.targetSpeed;
+    private static double getPhaseSpeed(double time, String subSeason, long cycleTicks) {
+        long safeCycle = ModConfig.sanitizeCycleLengthTicks(cycleTicks);
+        boolean day = positiveModulo(time, DAY_LENGTH) < HALF_DAY;
+        double phaseTicks = day
+                ? ModConfig.getDayTicksForSubSeason(subSeason, safeCycle)
+                : ModConfig.getNightTicksForSubSeason(subSeason, safeCycle);
+        if (!Double.isFinite(phaseTicks) || phaseTicks < 1.0) {
+            return averageSpeed(subSeason, safeCycle);
         }
+        return HALF_DAY / phaseTicks;
+    }
 
-        return state.currentServerTime + elapsed * speed;
+    private static double averageSpeed(String subSeason, long cycleTicks) {
+        long safeCycle = ModConfig.sanitizeCycleLengthTicks(cycleTicks);
+        double dayTicks = ModConfig.getDayTicksForSubSeason(subSeason, safeCycle);
+        double nightTicks = ModConfig.getNightTicksForSubSeason(subSeason, safeCycle);
+        double total = dayTicks + nightTicks;
+        return total > 0.0 && Double.isFinite(total) ? DAY_LENGTH / total : DAY_LENGTH / safeCycle;
+    }
+
+    private static double shortestPhaseDifference(double serverTime, double visualTime) {
+        double difference = (serverTime - visualTime) % DAY_LENGTH;
+        if (difference > HALF_DAY) difference -= DAY_LENGTH;
+        if (difference < -HALF_DAY) difference += DAY_LENGTH;
+        return difference;
+    }
+
+    private static double positiveModulo(double value, double modulus) {
+        double result = value % modulus;
+        return result < 0.0 ? result + modulus : result;
     }
 
     public static long normalizeDifference(long difference) {
-        if (difference > DAY_LENGTH / 2L) {
-            return difference - DAY_LENGTH;
-        }
-        if (difference < -DAY_LENGTH / 2L) {
-            return difference + DAY_LENGTH;
-        }
+        if (difference > DAY_LENGTH / 2.0) return difference - (long) DAY_LENGTH;
+        if (difference < -DAY_LENGTH / 2.0) return difference + (long) DAY_LENGTH;
         return difference;
     }
 
     public static final class State {
         private boolean initialized;
-        private long previousServerTime;
-        private long currentServerTime;
-        private double serverInterval;
-        private long anchorClientTick;
-        private double visualSpeed;
-        private double targetSpeed;
+        private double visualTime;
+        private long lastClientTick;
+        private long lastSeasonRefresh;
+        private String subSeason;
+        private double correctionRemaining;
     }
 }

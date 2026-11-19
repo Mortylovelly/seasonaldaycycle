@@ -5,122 +5,69 @@ import com.seasonaldaycycle.network.DayCycleLengthSyncPayload;
 import com.seasonaldaycycle.network.OpenDayCycleScreenPayload;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.option.KeyBinding;
-import net.minecraft.client.util.InputUtil;
-import org.lwjgl.glfw.GLFW;
 
 public final class SeasonalDayCycleClient implements ClientModInitializer {
-    private static KeyBinding toggleCursorKey;
-    private static boolean cursorMode;
     private static long knownCycleLengthTicks = ModConfig.DEFAULT_CYCLE_LENGTH_TICKS;
 
     @Override
     public void onInitializeClient() {
-        toggleCursorKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
-                "key.seasonaldaycycle.toggle_cursor",
-                InputUtil.Type.KEYSYM,
-                GLFW.GLFW_KEY_G,
-                "category.seasonaldaycycle"
-        ));
-
-        ClientTickEvents.END_CLIENT_TICK.register(SeasonalDayCycleClient::tick);
-
+        VertexHudConfig.load();
+        ClientTickEvents.END_CLIENT_TICK.register(VertexPanelController::tick);
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) ->
-                client.execute(() -> resetForWorldExit(client)));
+                client.execute(SeasonalDayCycleClient::resetForWorldExit));
 
         ClientPlayNetworking.registerGlobalReceiver(DayCycleLengthSyncPayload.TYPE, (payload, player, responseSender) -> {
-            MinecraftClient client = MinecraftClient.getInstance();
             long ticks = ModConfig.sanitizeCycleLengthTicks(payload.ticks());
             knownCycleLengthTicks = ticks;
             ModConfig.setCycleLengthTicks(ticks);
             ModConfig.setSyncedSeasonDayRatios(
-                    payload.springDayRatio(),
-                    payload.summerDayRatio(),
-                    payload.autumnDayRatio(),
-                    payload.winterDayRatio()
+                    payload.springDayRatio(), payload.summerDayRatio(),
+                    payload.autumnDayRatio(), payload.winterDayRatio()
             );
-
             DayCycleScreen screen = DayCycleScreen.getActive();
-            if (screen != null) {
-                screen.setCycleLengthFromServer(ticks, payload.canEdit());
-            } else {
-                DayCycleScreen.updateCanEdit(payload.canEdit());
-            }
+            if (screen != null) screen.setCycleLengthFromServer(ticks, payload.canEdit());
+            else DayCycleScreen.updateCanEdit(payload.canEdit());
         });
 
         ClientPlayNetworking.registerGlobalReceiver(OpenDayCycleScreenPayload.TYPE, (payload, player, responseSender) ->
                 VertexPanelController.openMain(MinecraftClient.getInstance()));
 
         HudRenderCallback.EVENT.register((drawContext, tickCounter) -> {
-            if (!VertexPanelController.isActive()) {
-                return;
-            }
-
             MinecraftClient client = MinecraftClient.getInstance();
-            double scale = client.getWindow().getScaleFactor();
-            int mouseX = (int) Math.round(client.mouse.getX() / scale);
-            int mouseY = (int) Math.round(client.mouse.getY() / scale);
-            VertexPanelController.render(drawContext, mouseX, mouseY, 0.0f);
+            int width = client.getWindow().getScaledWidth();
+            int height = client.getWindow().getScaledHeight();
+            AiAgentCursorCompat.Pointer pointer = AiAgentCursorCompat.getScaledPointer(client);
+            if (VertexPanelController.isActive()) {
+                VertexPanelController.render(drawContext,
+                        (int) Math.round(pointer.x()), (int) Math.round(pointer.y()), 0.0f);
+            } else {
+                VertexHudOverlay.render(drawContext, width, height);
+            }
         });
     }
 
-    private static void tick(MinecraftClient client) {
-        while (toggleCursorKey.wasPressed()) {
-            if (!VertexPanelController.isActive()) {
-                continue;
-            }
-            setCursorMode(client, !cursorMode);
-        }
-
-        VertexPanelController.tick(client);
-
-        if (!VertexPanelController.isActive() && cursorMode) {
-            setCursorMode(client, false);
-        }
-    }
-
-    private static void resetForWorldExit(MinecraftClient client) {
-        if (VertexPanelController.isActive()) {
-            VertexPanelController.close(client);
-        } else {
+    private static void resetForWorldExit() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (VertexPanelController.isActive()) VertexPanelController.close(client);
+        else {
             DayCycleScreen screen = DayCycleScreen.getActive();
-            if (screen != null) {
-                screen.close();
-            }
+            if (screen != null) screen.close();
         }
-
         knownCycleLengthTicks = ModConfig.DEFAULT_CYCLE_LENGTH_TICKS;
         ModConfig.setCycleLengthTicks(ModConfig.DEFAULT_CYCLE_LENGTH_TICKS);
         ModConfig.clearSyncedSeasonDayRatios();
-        cursorMode = false;
-        client.mouse.lockCursor();
+        SkyAngleInterpolationState.clearAll();
+        VertexHudOverlay.reset();
     }
 
-    public static long getKnownCycleLengthTicks() {
-        return knownCycleLengthTicks;
-    }
+    public static long getKnownCycleLengthTicks() { return knownCycleLengthTicks; }
 
     public static void setKnownCycleLengthTicks(long ticks) {
         knownCycleLengthTicks = ModConfig.sanitizeCycleLengthTicks(ticks);
         ModConfig.setCycleLengthTicks(knownCycleLengthTicks);
-    }
-
-    public static boolean isCursorMode() {
-        return cursorMode;
-    }
-
-    public static void setCursorMode(MinecraftClient client, boolean enabled) {
-        cursorMode = enabled;
-
-        if (enabled) {
-            client.mouse.unlockCursor();
-        } else if (client.world != null && client.currentScreen == null) {
-            client.mouse.lockCursor();
-        }
     }
 }

@@ -12,7 +12,7 @@ public final class VertexNavigationPanel {
     private static final int HEIGHT_MAIN = 280;
     private static final int WIDTH_PAGE = 360;
     private static final int HEIGHT_PAGE = 252;
-    private static final float UI_SCALE = 0.40f;
+    private static final float UI_SCALE = 1.0f;
     private static final int HEADER_HEIGHT = 34;
     private static final int MINI_SIZE = 42;
     private static final int MINI_PADDING = 8;
@@ -287,7 +287,7 @@ public final class VertexNavigationPanel {
 
         drawItemIcon(context, new ItemStack(Items.COMPASS), left + 17, cardY + 20, 2.0f);
         context.drawTextWithShadow(renderer, Text.literal("WORLD"), left + 65, cardY + 18, 0xFFFFFFFF);
-        context.drawTextWithShadow(renderer, Text.literal("Мир, время, погода и другие инструменты"), left + 65, cardY + 35, 0xFFC0C6CD);
+        context.drawTextWithShadow(renderer, Text.literal(fitText("Мир, время, погода и другие инструменты", cardWidth - 82)), left + 65, cardY + 35, 0xFFC0C6CD);
         context.drawTextWithShadow(renderer, Text.literal("Открыть"), left + 65, cardY + 52, 0xFFE1E5E9);
     }
 
@@ -304,7 +304,7 @@ public final class VertexNavigationPanel {
         context.fill(left, cardY, left + cardWidth, cardY + 1, 0x889AA1A9);
         drawItemIcon(context, new ItemStack(Items.CLOCK), left + 16, cardY + 18, 1.7f);
         context.drawTextWithShadow(renderer, Text.literal("TIME AND WEATHER"), left + 58, cardY + 16, 0xFFFFFFFF);
-        context.drawTextWithShadow(renderer, Text.literal("Время суток, длительность, погода и сезонные параметры"), left + 58, cardY + 34, 0xFFC0C6CD);
+        context.drawTextWithShadow(renderer, Text.literal(fitText("Время суток, длительность, погода и сезонные параметры", cardWidth - 76)), left + 58, cardY + 34, 0xFFC0C6CD);
         context.drawTextWithShadow(renderer, Text.literal("Открыть настройки"), left + 58, cardY + 49, 0xFFE1E5E9);
 
         context.drawTextWithShadow(renderer, Text.literal("Другие инструменты мира появятся здесь"), left, cardY + 91, 0xFF929AA4);
@@ -322,6 +322,16 @@ public final class VertexNavigationPanel {
         context.getMatrices().translate(miniX + 21, miniY + 21, 0.0f);
         context.drawItem(new ItemStack(Items.CLOCK), -8, -8);
         context.getMatrices().pop();
+    }
+
+    private String fitText(String value, int maxWidth) {
+        var renderer = MinecraftClient.getInstance().textRenderer;
+        if (renderer.getWidth(value) <= maxWidth) return value;
+        String shortened = value;
+        while (!shortened.isEmpty() && renderer.getWidth(shortened + "…") > maxWidth) {
+            shortened = shortened.substring(0, shortened.length() - 1);
+        }
+        return shortened + "…";
     }
 
     private void drawItemIcon(DrawContext context, ItemStack stack, int x, int y, float scale) {

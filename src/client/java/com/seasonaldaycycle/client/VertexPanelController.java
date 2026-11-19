@@ -40,7 +40,6 @@ public final class VertexPanelController {
         currentPage = Page.MAIN;
         navigationPanel = new VertexNavigationPanel(false, false);
         navigationPanel.setMiniPosition(miniX, miniY);
-        setCursor(client);
     }
 
     public static void openWorld(MinecraftClient client) {
@@ -52,7 +51,6 @@ public final class VertexPanelController {
         currentPage = Page.WORLD;
         navigationPanel = new VertexNavigationPanel(true, false);
         navigationPanel.setMiniPosition(miniX, miniY);
-        setCursor(client);
     }
 
     public static void openTime(MinecraftClient client) {
@@ -70,7 +68,6 @@ public final class VertexPanelController {
             accessor.seasonaldaycycle$setMiniY(miniY);
         }
 
-        setCursor(client);
     }
 
     public static void close(MinecraftClient client) {
@@ -84,7 +81,6 @@ public final class VertexPanelController {
 
         navigationPanel = null;
         currentPage = Page.NONE;
-        client.mouse.lockCursor();
     }
 
     public static void tick(MinecraftClient client) {
@@ -174,10 +170,6 @@ public final class VertexPanelController {
 
     public static boolean isCursorBlockingCamera() {
         return isActive();
-    }
-
-    public static void setCursor(MinecraftClient client) {
-        SeasonalDayCycleClient.setCursorMode(client, true);
     }
 
     public static void returnToMain(MinecraftClient client) {
