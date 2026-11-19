@@ -5,7 +5,6 @@
   "client": [
     "LunarWorldViewMixin",
     "ClientPlayNetworkHandlerMixin",
-    "DayCycleMouseMixin",
     "DayCycleScreenRenderMixin",
     "DayCycleScreenMiniAccessor"
   ],
