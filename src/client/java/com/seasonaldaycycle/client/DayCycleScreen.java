@@ -504,7 +504,7 @@ public final class DayCycleScreen {
         context.drawCenteredTextWithShadow(MinecraftClient.getInstance().textRenderer, "−", x + 11, y + 2, hover ? 0xFFFFFFFF : 0xFFE8EBEE);
     }
 
-     private void drawSlider(DrawContext context, int x, int y, int mouseX, int mouseY) {
+    private void drawSlider(DrawContext context, int x, int y, int mouseX, int mouseY) {
         int trackY = y + 2;
         context.fill(x, trackY, x + SLIDER_WIDTH, trackY + SLIDER_HEIGHT, 0x99515760);
         int knobX = sliderXForValue(cycleLengthTicks);
@@ -1038,6 +1038,6 @@ public final class DayCycleScreen {
         draggingHudScale = false;
         draggingMini = false;
         miniPressCandidate = false;
-        // Cursor capture is exclusively owned by Minecraft AI Agent (G).
+        // Cursor mode is controlled exclusively by Minecraft AI Agent.
     }
 }
