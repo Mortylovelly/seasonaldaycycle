@@ -16,6 +16,7 @@ public final class SeasonalDayCycleClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         VertexHudConfig.load();
+        VertexUiConfig.load();
         ClientTickEvents.END_CLIENT_TICK.register(VertexPanelController::tick);
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) ->
                 client.execute(SeasonalDayCycleClient::resetForWorldExit));
@@ -40,7 +41,7 @@ public final class SeasonalDayCycleClient implements ClientModInitializer {
             MinecraftClient client = MinecraftClient.getInstance();
             int width = client.getWindow().getScaledWidth();
             int height = client.getWindow().getScaledHeight();
-            AiAgentCursorCompat.Pointer pointer = AiAgentCursorCompat.getScaledPointer(client);
+            VertexCursorController.Pointer pointer = VertexCursorController.getScaledPointer(client);
             if (VertexPanelController.isActive()) {
                 VertexPanelController.render(drawContext,
                         (int) Math.round(pointer.x()), (int) Math.round(pointer.y()), 0.0f);
