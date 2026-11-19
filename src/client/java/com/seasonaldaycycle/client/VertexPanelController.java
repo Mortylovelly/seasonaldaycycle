@@ -67,7 +67,6 @@ public final class VertexPanelController {
             accessor.seasonaldaycycle$setMiniX(miniX);
             accessor.seasonaldaycycle$setMiniY(miniY);
         }
-
     }
 
     public static void close(MinecraftClient client) {
@@ -89,7 +88,7 @@ public final class VertexPanelController {
             if (screen == null) {
                 currentPage = Page.NONE;
                 navigationPanel = null;
-                        return;
+                return;
             }
             syncMiniFromTime(screen);
             return;
