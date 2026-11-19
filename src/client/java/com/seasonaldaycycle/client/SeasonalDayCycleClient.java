@@ -17,6 +17,7 @@ public final class SeasonalDayCycleClient implements ClientModInitializer {
     public void onInitializeClient() {
         VertexHudConfig.load();
         VertexUiConfig.load();
+        AiAgentCursorCompat.registerPointerHandlers();
         ClientTickEvents.END_CLIENT_TICK.register(VertexPanelController::tick);
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) ->
                 client.execute(SeasonalDayCycleClient::resetForWorldExit));
