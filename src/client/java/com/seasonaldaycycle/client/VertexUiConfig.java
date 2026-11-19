@@ -53,9 +53,17 @@ public final class VertexUiConfig {
     }
 
     public static void setScale(float scale) {
-        float sanitized = clamp(scale);
-        if (Math.abs(values.scale - sanitized) < 0.0001f) return;
-        values.scale = sanitized;
+        previewScale(scale);
+        commitScale();
+    }
+
+    public static void previewScale(float scale) {
+        values.scale = clamp(scale);
+    }
+
+    public static void commitScale() {
+        values.scale = clamp(values.scale);
+        values.version = CONFIG_VERSION;
         save();
     }
 
