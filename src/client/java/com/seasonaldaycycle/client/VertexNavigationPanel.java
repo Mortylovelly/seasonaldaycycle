@@ -189,7 +189,9 @@ public final class VertexNavigationPanel {
                 return true;
             }
 
-            boolean dragged = draggingPanel || resizingPanel;
+            boolean wasResizing = resizingPanel;
+            boolean dragged = draggingPanel || wasResizing;
+            if (wasResizing) VertexUiConfig.commitScale();
             draggingPanel = false;
             resizingPanel = false;
             return dragged;
@@ -218,7 +220,7 @@ public final class VertexNavigationPanel {
             double verticalDelta = (mouseY - resizeStartMouseY) / (double) Math.max(1, getPanelHeight());
             double scaleDelta = Math.abs(horizontalDelta) >= Math.abs(verticalDelta)
                     ? horizontalDelta : verticalDelta;
-            VertexUiConfig.setScale(resizeStartScale + (float) scaleDelta);
+            VertexUiConfig.previewScale(resizeStartScale + (float) scaleDelta);
             clampPanel(MinecraftClient.getInstance().getWindow().getScaledWidth(),
                     MinecraftClient.getInstance().getWindow().getScaledHeight());
             return true;
