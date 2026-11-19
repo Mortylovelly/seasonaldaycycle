@@ -12,13 +12,29 @@ public final class VertexCursorController {
     private static boolean ownsCursor;
     private static long windowHandle;
     private static int previousCursorMode = GLFW.GLFW_CURSOR_DISABLED;
-    private static boolean aiCursorWasEnabled;
 
     private VertexCursorController() {
     }
 
+    /** True when the optional AI Agent cursor API is present. */
+    public static boolean usesAiAgentCursor() {
+        return AiAgentCursorCompat.isAvailable();
+    }
+
+    /** With AI Agent installed, its G toggle must be enabled before Vertex consumes mouse input. */
+    public static boolean shouldHandleMouseInput() {
+        return !AiAgentCursorCompat.isAvailable() || AiAgentCursorCompat.isEnabled();
+    }
+
     public static void acquire(MinecraftClient client) {
         if (client == null) return;
+
+        // AI Agent exclusively owns cursor unlocking whenever its API is present.
+        if (AiAgentCursorCompat.isAvailable()) {
+            if (ownsCursor) release(client);
+            return;
+        }
+
         long handle = client.getWindow().getHandle();
         if (ownsCursor && windowHandle == handle) {
             setCursorNormal(handle);
@@ -27,13 +43,12 @@ public final class VertexCursorController {
         if (ownsCursor) release(client);
         windowHandle = handle;
         previousCursorMode = GLFW.glfwGetInputMode(handle, GLFW.GLFW_CURSOR);
-        aiCursorWasEnabled = AiAgentCursorCompat.isEnabled();
         ownsCursor = true;
         setCursorNormal(handle);
     }
 
     public static void ensureCursorAvailable(MinecraftClient client) {
-        if (client == null) return;
+        if (client == null || AiAgentCursorCompat.isAvailable()) return;
         long handle = client.getWindow().getHandle();
         if (!ownsCursor || windowHandle != handle) acquire(client);
         else setCursorNormal(handle);
@@ -41,13 +56,11 @@ public final class VertexCursorController {
 
     public static void release(MinecraftClient client) {
         if (!ownsCursor) return;
-        if (windowHandle != 0L && !AiAgentCursorCompat.isEnabled()) {
-            int restoreMode = aiCursorWasEnabled ? GLFW.GLFW_CURSOR_DISABLED : previousCursorMode;
-            GLFW.glfwSetInputMode(windowHandle, GLFW.GLFW_CURSOR, restoreMode);
+        if (windowHandle != 0L) {
+            GLFW.glfwSetInputMode(windowHandle, GLFW.GLFW_CURSOR, previousCursorMode);
         }
         ownsCursor = false;
         windowHandle = 0L;
-        aiCursorWasEnabled = false;
     }
 
     public static Pointer getScaledPointer(MinecraftClient client) {
