@@ -18,7 +18,7 @@ public final class DayCycleScreen {
     private static final int PANEL_WIDTH = 360;
     private static final int DAY_PANEL_HEIGHT = 280;
     private static final int SEASON_PANEL_HEIGHT = 360;
-    private static final int HEADER_HEIGHT = 34;
+    private static final int HEADER_HEIGHT = 29;
     private static final int SLIDER_WIDTH = 218;
     private static final int SLIDER_HEIGHT = 7;
     private static final int BUTTON_HEIGHT = 20;
@@ -73,6 +73,10 @@ public final class DayCycleScreen {
     private SereneSeasonsCompat.SeasonInfo cachedSeasonInfo = SereneSeasonsCompat.SeasonInfo.unavailable();
     private long nextSeasonRefreshMillis;
     private boolean draggingPanel;
+    private boolean resizingPanel;
+    private double resizeStartMouseX;
+    private double resizeStartMouseY;
+    private float resizeStartScale;
     private boolean draggingSlider;
     private boolean draggingMini;
     private boolean miniPressCandidate;
@@ -133,6 +137,7 @@ public final class DayCycleScreen {
         int localMouseY = toLogicalY(mouseY);
         drawPanelGlass(context);
         drawContent(context, localMouseX, localMouseY);
+        drawResizeGrip(context);
 
         context.getMatrices().pop();
     }
@@ -168,7 +173,6 @@ public final class DayCycleScreen {
         context.drawTextWithShadow(textRenderer,
                 Text.literal(showHudSettingsPage ? "информация на экране" : "скорость времени"),
                 left, panelY + 23, 0xFFC0C6CD);
-        drawScaleControls(context, mouseX, mouseY);
         drawMinimizeButton(context, mouseX, mouseY);
         drawCloseButton(context, mouseX, mouseY);
         drawTabs(context, mouseX, mouseY);
@@ -453,14 +457,35 @@ public final class DayCycleScreen {
     }
 
     private void drawPanelGlass(DrawContext context) {
-        context.fill(panelX + 3, panelY + 5, panelX + PANEL_WIDTH + 3, panelY + getPanelHeight() + 5, 0x32000000);
-        context.fill(panelX, panelY, panelX + PANEL_WIDTH, panelY + getPanelHeight(), 0x8A666B73);
-        context.fill(panelX + 1, panelY + 1, panelX + PANEL_WIDTH - 1, panelY + HEADER_HEIGHT, 0x9B777C84);
-        context.fill(panelX + 1, panelY + HEADER_HEIGHT, panelX + PANEL_WIDTH - 1, panelY + HEADER_HEIGHT + 1, 0xAABDC3CB);
-        context.fill(panelX + 1, panelY + getPanelHeight() - 1, panelX + PANEL_WIDTH - 1, panelY + getPanelHeight(), 0x8A949AA3);
-        context.fill(panelX + 1, panelY + 1, panelX + 2, panelY + getPanelHeight() - 1, 0x8A949AA3);
-        context.fill(panelX + PANEL_WIDTH - 2, panelY + 1, panelX + PANEL_WIDTH - 1, panelY + getPanelHeight() - 1, 0x8A949AA3);
-        context.fill(panelX + 12, panelY + HEADER_HEIGHT + 7, panelX + PANEL_WIDTH - 12, panelY + HEADER_HEIGHT + 8, 0x28FFFFFF);
+        int right = panelX + PANEL_WIDTH;
+        int bottom = panelY + getPanelHeight();
+        context.fill(panelX + 3, panelY + 5, right + 3, bottom + 5, 0x32000000);
+        drawRoundedPanel(context, panelX, panelY, right, bottom, 0xFF77818B);
+        drawRoundedPanel(context, panelX + 1, panelY + 1, right - 1, bottom - 1, 0xFF424B56);
+        drawRoundedPanel(context, panelX + 5, panelY + 5, right - 5, panelY + HEADER_HEIGHT + 7, 0xFF343D47);
+        context.fill(panelX + 12, panelY + HEADER_HEIGHT + 7, right - 12,
+                panelY + HEADER_HEIGHT + 8, 0x286B7886);
+    }
+
+    private void drawResizeGrip(DrawContext context) {
+        int right = panelX + PANEL_WIDTH - 5;
+        int bottom = panelY + getPanelHeight() - 5;
+        int color = resizingPanel ? 0xFFEAF0F6 : 0xFF9BA8B5;
+        context.fill(right - 8, bottom - 1, right, bottom, color);
+        context.fill(right - 5, bottom - 4, right, bottom - 3, color);
+        context.fill(right - 2, bottom - 7, right, bottom - 6, color);
+    }
+
+    private static void drawRoundedPanel(DrawContext context, int left, int top,
+                                         int right, int bottom, int color) {
+        if (right - left < 4 || bottom - top < 4) {
+            context.fill(left, top, right, bottom, color);
+            return;
+        }
+        context.fill(left + 4, top, right - 4, bottom, color);
+        context.fill(left + 2, top + 1, right - 2, bottom - 1, color);
+        context.fill(left + 1, top + 2, right - 1, bottom - 2, color);
+        context.fill(left, top + 4, right, bottom - 4, color);
     }
 
     private void drawCloseButton(DrawContext context, int mouseX, int mouseY) {
@@ -479,23 +504,7 @@ public final class DayCycleScreen {
         context.drawCenteredTextWithShadow(MinecraftClient.getInstance().textRenderer, "−", x + 11, y + 2, hover ? 0xFFFFFFFF : 0xFFE8EBEE);
     }
 
-    private void drawScaleControls(DrawContext context, int mouseX, int mouseY) {
-        int y = panelY + 6;
-        int minusX = panelX + PANEL_WIDTH - 109;
-        int plusX = panelX + PANEL_WIDTH - 84;
-        drawRightText(context, Text.literal(Math.round(VertexUiConfig.getScale() * 100.0f) + "%"),
-                minusX - 5, y + 7, 0xFFE8EBEE);
-        drawScaleButton(context, minusX, y, "−", inside(mouseX, mouseY, minusX, y, 20, 22));
-        drawScaleButton(context, plusX, y, "+", inside(mouseX, mouseY, plusX, y, 20, 22));
-    }
-
-    private void drawScaleButton(DrawContext context, int x, int y, String label, boolean hovered) {
-        context.fill(x, y, x + 20, y + 22, hovered ? 0xCC5B626A : 0x88464A51);
-        context.drawCenteredTextWithShadow(MinecraftClient.getInstance().textRenderer,
-                label, x + 10, y + 2, hovered ? 0xFFFFFFFF : 0xFFE8EBEE);
-    }
-
-    private void drawSlider(DrawContext context, int x, int y, int mouseX, int mouseY) {
+     private void drawSlider(DrawContext context, int x, int y, int mouseX, int mouseY) {
         int trackY = y + 2;
         context.fill(x, trackY, x + SLIDER_WIDTH, trackY + SLIDER_HEIGHT, 0x99515760);
         int knobX = sliderXForValue(cycleLengthTicks);
@@ -571,20 +580,14 @@ public final class DayCycleScreen {
             int x = toLogicalX(mouseX);
             int y = toLogicalY(mouseY);
 
-            int scaleMinusX = panelX + PANEL_WIDTH - 109;
-            int scalePlusX = panelX + PANEL_WIDTH - 84;
-            if (inside(x, y, scaleMinusX, panelY + 6, 20, 22)) {
-                VertexUiConfig.adjustScale(-0.05f);
-                clampPanel(MinecraftClient.getInstance().getWindow().getScaledWidth(),
-                        MinecraftClient.getInstance().getWindow().getScaledHeight());
-                playUiSound(0.96f);
-                return true;
-            }
-            if (inside(x, y, scalePlusX, panelY + 6, 20, 22)) {
-                VertexUiConfig.adjustScale(0.05f);
-                clampPanel(MinecraftClient.getInstance().getWindow().getScaledWidth(),
-                        MinecraftClient.getInstance().getWindow().getScaledHeight());
-                playUiSound(1.04f);
+            if (inside(x, y, panelX + PANEL_WIDTH - 14,
+                    panelY + getPanelHeight() - 14, 14, 14)) {
+                resizingPanel = true;
+                resizeStartMouseX = mouseX;
+                resizeStartMouseY = mouseY;
+                resizeStartScale = VertexUiConfig.getScale();
+                draggingPanel = false;
+                playUiSound(1.0f);
                 return true;
             }
 
@@ -765,6 +768,7 @@ public final class DayCycleScreen {
             }
 
             boolean wasDraggingPanel = draggingPanel;
+            boolean wasResizingPanel = resizingPanel;
             boolean wasDraggingSlider = draggingSlider;
             boolean wasDraggingHudScale = draggingHudScale;
             if (draggingSlider) {
@@ -776,9 +780,10 @@ public final class DayCycleScreen {
                 playUiSound(1.04f);
             }
             draggingPanel = false;
+            resizingPanel = false;
             draggingSlider = false;
             draggingHudScale = false;
-            return wasDraggingPanel || wasDraggingSlider || wasDraggingHudScale;
+            return wasDraggingPanel || wasResizingPanel || wasDraggingSlider || wasDraggingHudScale;
         }
 
         return false;
@@ -799,6 +804,17 @@ public final class DayCycleScreen {
                 clampMini(width, height);
                 return true;
             }
+            return true;
+        }
+
+        if (resizingPanel) {
+            double horizontalDelta = (mouseX - resizeStartMouseX) / (double) PANEL_WIDTH;
+            double verticalDelta = (mouseY - resizeStartMouseY) / (double) Math.max(1, getPanelHeight());
+            double scaleDelta = Math.abs(horizontalDelta) >= Math.abs(verticalDelta)
+                    ? horizontalDelta : verticalDelta;
+            VertexUiConfig.setScale(resizeStartScale + (float) scaleDelta);
+            clampPanel(MinecraftClient.getInstance().getWindow().getScaledWidth(),
+                    MinecraftClient.getInstance().getWindow().getScaledHeight());
             return true;
         }
 
@@ -1014,10 +1030,8 @@ public final class DayCycleScreen {
     }
 
     public void close() {
-        MinecraftClient client = MinecraftClient.getInstance();
         if (ACTIVE == this) {
             ACTIVE = null;
-            VertexCursorController.release(client);
         }
         draggingPanel = false;
         draggingSlider = false;
