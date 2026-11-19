@@ -1,6 +1,6 @@
 package com.seasonaldaycycle.mixin;
 
-import com.seasonaldaycycle.client.AiAgentCursorCompat;
+import com.seasonaldaycycle.client.VertexCursorController;
 import com.seasonaldaycycle.client.VertexPanelController;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.Mouse;
@@ -17,10 +17,8 @@ public abstract class DayCycleMouseMixin {
     private void seasonaldaycycle$onMouseButton(long window, int button, int action, int modifiers, CallbackInfo ci) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.currentScreen != null || !VertexPanelController.isActive()) return;
-        if (AiAgentCursorCompat.isEnabled()) {
-            AiAgentCursorCompat.Pointer pointer = AiAgentCursorCompat.getScaledPointer(client);
-            VertexPanelController.handleMouseButton(pointer.x(), pointer.y(), button, action);
-        }
+        VertexCursorController.Pointer pointer = VertexCursorController.getScaledPointer(client);
+        VertexPanelController.handleMouseButton(pointer.x(), pointer.y(), button, action);
         if (action == GLFW.GLFW_PRESS || action == GLFW.GLFW_RELEASE) ci.cancel();
     }
 
@@ -28,11 +26,8 @@ public abstract class DayCycleMouseMixin {
     private void seasonaldaycycle$onCursorPos(long window, double cursorX, double cursorY, CallbackInfo ci) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.currentScreen != null || !VertexPanelController.isActive()) return;
-        if (AiAgentCursorCompat.isEnabled()) {
-            double x = cursorX * client.getWindow().getScaledWidth() / Math.max(1.0, client.getWindow().getWidth());
-            double y = cursorY * client.getWindow().getScaledHeight() / Math.max(1.0, client.getWindow().getHeight());
-            VertexPanelController.handleMouseMove(x, y);
-        }
+        VertexCursorController.Pointer pointer = VertexCursorController.toScaledPointer(client, cursorX, cursorY);
+        VertexPanelController.handleMouseMove(pointer.x(), pointer.y());
         ci.cancel();
     }
 
@@ -40,10 +35,8 @@ public abstract class DayCycleMouseMixin {
     private void seasonaldaycycle$onMouseScroll(long window, double horizontal, double vertical, CallbackInfo ci) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.currentScreen != null || !VertexPanelController.isActive()) return;
-        if (AiAgentCursorCompat.isEnabled()) {
-            AiAgentCursorCompat.Pointer pointer = AiAgentCursorCompat.getScaledPointer(client);
-            VertexPanelController.handleMouseScroll(pointer.x(), pointer.y(), vertical);
-        }
+        VertexCursorController.Pointer pointer = VertexCursorController.getScaledPointer(client);
+        VertexPanelController.handleMouseScroll(pointer.x(), pointer.y(), vertical);
         ci.cancel();
     }
 }
