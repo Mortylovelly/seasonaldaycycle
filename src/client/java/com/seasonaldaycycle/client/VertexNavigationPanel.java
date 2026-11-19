@@ -80,7 +80,7 @@ public final class VertexNavigationPanel {
         context.getMatrices().scale(uiScale, uiScale, 1.0f);
 
         drawPanelGlass(context, panelWidth, panelHeight);
-        drawHeader(context, mouseX, mouseY, panelWidth);
+        drawHeader(context, toLogicalX(mouseX), toLogicalY(mouseY), panelWidth);
 
         if (worldPage) {
             drawWorldPage(context);
@@ -117,6 +117,19 @@ public final class VertexNavigationPanel {
             int y = toLogicalY(mouseY);
             int width = getPanelWidth();
             int height = getPanelHeight();
+
+            int scaleMinusX = panelX + width - 109;
+            int scalePlusX = panelX + width - 84;
+            if (inside(x, y, scaleMinusX, panelY + 6, 20, 22)) {
+                VertexUiConfig.adjustScale(-0.05f);
+                clampPanel(client.getWindow().getScaledWidth(), client.getWindow().getScaledHeight());
+                return true;
+            }
+            if (inside(x, y, scalePlusX, panelY + 6, 20, 22)) {
+                VertexUiConfig.adjustScale(0.05f);
+                clampPanel(client.getWindow().getScaledWidth(), client.getWindow().getScaledHeight());
+                return true;
+            }
 
             if (inside(x, y, panelX + width - 29, panelY + 6, 22, 22)) {
                 VertexPanelController.close(client);
@@ -264,6 +277,8 @@ public final class VertexNavigationPanel {
             context.drawTextWithShadow(renderer, Text.literal("Universal utility"), panelX + 18, panelY + 22, 0xFFC0C6CD);
         }
 
+        drawScaleControls(context, mouseX, mouseY, width);
+
         int minimizeX = panelX + width - 57;
         int closeX = panelX + width - 29;
         boolean minHover = inside(mouseX, mouseY, minimizeX, panelY + 6, 22, 22);
@@ -342,6 +357,23 @@ public final class VertexNavigationPanel {
         context.getMatrices().pop();
     }
 
+    private void drawScaleControls(DrawContext context, int mouseX, int mouseY, int width) {
+        int y = panelY + 6;
+        int minusX = panelX + width - 109;
+        int plusX = panelX + width - 84;
+        context.drawTextWithShadow(MinecraftClient.getInstance().textRenderer,
+                Text.literal(Math.round(VertexUiConfig.getScale() * 100.0f) + "%"),
+                panelX + width - 146, y + 7, 0xFFE8EBEE);
+        drawScaleButton(context, minusX, y, "−", inside(mouseX, mouseY, minusX, y, 20, 22));
+        drawScaleButton(context, plusX, y, "+", inside(mouseX, mouseY, plusX, y, 20, 22));
+    }
+
+    private void drawScaleButton(DrawContext context, int x, int y, String label, boolean hovered) {
+        context.fill(x, y, x + 20, y + 22, hovered ? 0xCC5B626A : 0x88464A51);
+        context.drawCenteredTextWithShadow(MinecraftClient.getInstance().textRenderer,
+                label, x + 10, y + 2, hovered ? 0xFFFFFFFF : 0xFFE8EBEE);
+    }
+
     private int toLogicalX(double mouseX) {
         return panelX + (int) Math.round((mouseX - panelX) / getUiScale());
     }
@@ -356,7 +388,7 @@ public final class VertexNavigationPanel {
         int height = client.getWindow().getScaledHeight();
         float fitWidth = Math.max(0.25f, (width - 12.0f) / getPanelWidth());
         float fitHeight = Math.max(0.25f, (height - 12.0f) / getPanelHeight());
-        return Math.min(1.0f, Math.min(fitWidth, fitHeight));
+        return Math.max(0.25f, Math.min(VertexUiConfig.getScale(), Math.min(fitWidth, fitHeight)));
     }
 
     private void clampPanel(int width, int height) {
