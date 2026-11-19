@@ -168,9 +168,7 @@ public final class DayCycleScreen {
         context.drawTextWithShadow(textRenderer,
                 Text.literal(showHudSettingsPage ? "информация на экране" : "скорость времени"),
                 left, panelY + 23, 0xFFC0C6CD);
-        context.drawTextWithShadow(textRenderer,
-                Text.literal(AiAgentCursorCompat.isEnabled() ? "G · КУРСОР" : "G · НАЖМИ G"),
-                panelX + 238, panelY + 11, AiAgentCursorCompat.isEnabled() ? 0xFFBFE9C6 : 0xFFFFDB91);
+        drawScaleControls(context, mouseX, mouseY);
         drawMinimizeButton(context, mouseX, mouseY);
         drawCloseButton(context, mouseX, mouseY);
         drawTabs(context, mouseX, mouseY);
@@ -481,6 +479,22 @@ public final class DayCycleScreen {
         context.drawCenteredTextWithShadow(MinecraftClient.getInstance().textRenderer, "−", x + 11, y + 2, hover ? 0xFFFFFFFF : 0xFFE8EBEE);
     }
 
+    private void drawScaleControls(DrawContext context, int mouseX, int mouseY) {
+        int y = panelY + 6;
+        int minusX = panelX + PANEL_WIDTH - 109;
+        int plusX = panelX + PANEL_WIDTH - 84;
+        drawRightText(context, Text.literal(Math.round(VertexUiConfig.getScale() * 100.0f) + "%"),
+                minusX - 5, y + 7, 0xFFE8EBEE);
+        drawScaleButton(context, minusX, y, "−", inside(mouseX, mouseY, minusX, y, 20, 22));
+        drawScaleButton(context, plusX, y, "+", inside(mouseX, mouseY, plusX, y, 20, 22));
+    }
+
+    private void drawScaleButton(DrawContext context, int x, int y, String label, boolean hovered) {
+        context.fill(x, y, x + 20, y + 22, hovered ? 0xCC5B626A : 0x88464A51);
+        context.drawCenteredTextWithShadow(MinecraftClient.getInstance().textRenderer,
+                label, x + 10, y + 2, hovered ? 0xFFFFFFFF : 0xFFE8EBEE);
+    }
+
     private void drawSlider(DrawContext context, int x, int y, int mouseX, int mouseY) {
         int trackY = y + 2;
         context.fill(x, trackY, x + SLIDER_WIDTH, trackY + SLIDER_HEIGHT, 0x99515760);
@@ -556,6 +570,23 @@ public final class DayCycleScreen {
 
             int x = toLogicalX(mouseX);
             int y = toLogicalY(mouseY);
+
+            int scaleMinusX = panelX + PANEL_WIDTH - 109;
+            int scalePlusX = panelX + PANEL_WIDTH - 84;
+            if (inside(x, y, scaleMinusX, panelY + 6, 20, 22)) {
+                VertexUiConfig.adjustScale(-0.05f);
+                clampPanel(MinecraftClient.getInstance().getWindow().getScaledWidth(),
+                        MinecraftClient.getInstance().getWindow().getScaledHeight());
+                playUiSound(0.96f);
+                return true;
+            }
+            if (inside(x, y, scalePlusX, panelY + 6, 20, 22)) {
+                VertexUiConfig.adjustScale(0.05f);
+                clampPanel(MinecraftClient.getInstance().getWindow().getScaledWidth(),
+                        MinecraftClient.getInstance().getWindow().getScaledHeight());
+                playUiSound(1.04f);
+                return true;
+            }
 
             int closeX = panelX + PANEL_WIDTH - 29;
             int closeY = panelY + 6;
@@ -930,7 +961,7 @@ public final class DayCycleScreen {
         int height = client.getWindow().getScaledHeight();
         float fitWidth = Math.max(0.25f, (width - 12.0f) / PANEL_WIDTH);
         float fitHeight = Math.max(0.25f, (height - 12.0f) / getPanelHeight());
-        return Math.min(1.0f, Math.min(fitWidth, fitHeight));
+        return Math.max(0.25f, Math.min(VertexUiConfig.getScale(), Math.min(fitWidth, fitHeight)));
     }
 
     private int visualPanelWidth() {
@@ -986,6 +1017,7 @@ public final class DayCycleScreen {
         MinecraftClient client = MinecraftClient.getInstance();
         if (ACTIVE == this) {
             ACTIVE = null;
+            VertexCursorController.release(client);
         }
         draggingPanel = false;
         draggingSlider = false;
