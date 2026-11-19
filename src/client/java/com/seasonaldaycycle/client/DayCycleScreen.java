@@ -402,8 +402,8 @@ public final class DayCycleScreen {
         int sliderX = panelX + 20;
         int sliderWidth = 250;
         double normalized = Math.max(0.0, Math.min(1.0, (mouseX - sliderX) / (double) sliderWidth));
-        VertexHudConfig.previewScale(VertexHudConfig.MIN_SCALE
-                + normalized * (VertexHudConfig.MAX_SCALE - VertexHudConfig.MIN_SCALE));
+        VertexHudConfig.previewScale((float) (VertexHudConfig.MIN_SCALE
+                + normalized * (VertexHudConfig.MAX_SCALE - VertexHudConfig.MIN_SCALE)));
     }
 
     private static String getSeasonName(int seasonIndex) {
