@@ -40,6 +40,7 @@ public final class VertexPanelController {
         currentPage = Page.MAIN;
         navigationPanel = new VertexNavigationPanel(false, false);
         navigationPanel.setMiniPosition(miniX, miniY);
+        VertexCursorController.acquire(client);
     }
 
     public static void openWorld(MinecraftClient client) {
@@ -51,6 +52,7 @@ public final class VertexPanelController {
         currentPage = Page.WORLD;
         navigationPanel = new VertexNavigationPanel(true, false);
         navigationPanel.setMiniPosition(miniX, miniY);
+        VertexCursorController.acquire(client);
     }
 
     public static void openTime(MinecraftClient client) {
@@ -67,6 +69,7 @@ public final class VertexPanelController {
             accessor.seasonaldaycycle$setMiniX(miniX);
             accessor.seasonaldaycycle$setMiniY(miniY);
         }
+        VertexCursorController.acquire(client);
 
     }
 
@@ -81,14 +84,19 @@ public final class VertexPanelController {
 
         navigationPanel = null;
         currentPage = Page.NONE;
+        VertexCursorController.release(client);
     }
 
     public static void tick(MinecraftClient client) {
+        if (currentPage != Page.NONE && client.currentScreen == null) {
+            VertexCursorController.ensureCursorAvailable(client);
+        }
         if (currentPage == Page.TIME) {
             DayCycleScreen screen = DayCycleScreen.getActive();
             if (screen == null) {
                 currentPage = Page.NONE;
                 navigationPanel = null;
+                VertexCursorController.release(client);
                 return;
             }
             syncMiniFromTime(screen);
