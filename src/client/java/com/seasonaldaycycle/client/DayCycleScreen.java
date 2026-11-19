@@ -366,23 +366,30 @@ public final class DayCycleScreen {
         int scaleY = contentTop + 146;
         int scaleWidth = 250;
         context.fill(scaleX, scaleY + 3, scaleX + scaleWidth, scaleY + 7, 0x99515760);
-        int knobX = scaleX + Math.round((VertexHudConfig.getScale() - 0.75f) * scaleWidth);
+        float scaleProgress = (VertexHudConfig.getScale() - VertexHudConfig.MIN_SCALE)
+                / (VertexHudConfig.MAX_SCALE - VertexHudConfig.MIN_SCALE);
+        int knobX = scaleX + Math.round(scaleProgress * scaleWidth);
         context.fill(scaleX, scaleY + 3, knobX, scaleY + 7, 0xCCBCC3CA);
         boolean scaleHover = inside(mouseX, mouseY, scaleX - 6, scaleY - 4, scaleWidth + 12, 18);
         context.fill(knobX - 5, scaleY - 1, knobX + 5, scaleY + 13,
                 scaleHover || draggingHudScale ? 0xFFFFFFFF : 0xFFE4E7EA);
         context.fill(knobX - 2, scaleY + 2, knobX + 3, scaleY + 10, 0xFF626870);
-        context.drawTextWithShadow(renderer, Text.literal("75%"), scaleX, scaleY + 15, 0xFF929AA4);
-        drawRightText(context, Text.literal("175%"), scaleX + scaleWidth, scaleY + 15, 0xFF929AA4);
+        context.drawTextWithShadow(renderer, Text.literal(Math.round(VertexHudConfig.MIN_SCALE * 100.0f) + "%"),
+                scaleX, scaleY + 15, 0xFF929AA4);
+        drawRightText(context, Text.literal(Math.round(VertexHudConfig.MAX_SCALE * 100.0f) + "%"),
+                scaleX + scaleWidth, scaleY + 15, 0xFF929AA4);
 
         context.drawTextWithShadow(renderer, Text.literal("ПРЕДПРОСМОТР"), left, contentTop + 174, 0xFFD0D5DB);
         int previewY = contentTop + 190;
-        context.fill(left, previewY, right, previewY + 43, 0xAA252A31);
-        context.fill(left, previewY, right, previewY + 1, 0x889AA1A9);
+        context.getMatrices().push();
+        float previewScale = VertexHudConfig.getScale();
+        context.getMatrices().translate(left + 2.0f, previewY + 3.0f, 0.0f);
+        context.getMatrices().scale(previewScale, previewScale, 1.0f);
         context.drawTextWithShadow(renderer, Text.literal("ДЕНЬ 125  •  ЦИКЛ #126  •  ЗИМА"),
-                left + 9, previewY + 8, 0xFFFFFFFF);
+                0, 0, 0xFFFFFFFF);
         context.drawTextWithShadow(renderer, Text.literal("ДО СМЕНЫ 17 ДН.  •  13:42  •  ДЕНЬ 25 МИН"),
-                left + 9, previewY + 24, 0xFFE0E6ED);
+                0, renderer.fontHeight + 1, 0xFFE0E6ED);
+        context.getMatrices().pop();
 
         int backX = panelX + (PANEL_WIDTH - 112) / 2;
         int backY = panelY + getPanelHeight() - 34;
@@ -395,7 +402,8 @@ public final class DayCycleScreen {
         int sliderX = panelX + 20;
         int sliderWidth = 250;
         double normalized = Math.max(0.0, Math.min(1.0, (mouseX - sliderX) / (double) sliderWidth));
-        VertexHudConfig.previewScale((float) (0.75 + normalized));
+        VertexHudConfig.previewScale(VertexHudConfig.MIN_SCALE
+                + normalized * (VertexHudConfig.MAX_SCALE - VertexHudConfig.MIN_SCALE));
     }
 
     private static String getSeasonName(int seasonIndex) {
