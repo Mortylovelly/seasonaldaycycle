@@ -60,7 +60,11 @@ public final class AiAgentCursorCompat {
             Method addScroll = events.getMethod("addMouseScrollListener", Consumer.class);
 
             Consumer<double[]> buttonListener = event -> {
-                if (event == null || event.length < 4 || !VertexPanelController.isActive()) return;
+                if (event == null || event.length < 4) return;
+                pointerX = event[0];
+                pointerY = event[1];
+                pointerKnown = true;
+                if (!VertexPanelController.isActive()) return;
                 VertexPanelController.handleMouseButton(
                         event[0], event[1], (int) event[2], (int) event[3]);
             };
