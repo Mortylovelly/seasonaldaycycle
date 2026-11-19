@@ -9,12 +9,14 @@ import org.lwjgl.system.MemoryStack;
 import java.lang.reflect.Method;
 import java.nio.DoubleBuffer;
 
-/** Optional reflective bridge to AI Agent; that mod remains sole cursor owner. */
+/** Optional bridge to AI Agent's public free-cursor API. */
 public final class AiAgentCursorCompat {
     private static final String CURSOR_CLASS = "com.mortylovelly.minecraftai.client.AiFreeCursor";
     private static final Method IS_ENABLED = findEnabledMethod();
+    private static final Method TOGGLE = findToggleMethod();
 
-    private AiAgentCursorCompat() {}
+    private AiAgentCursorCompat() {
+    }
 
     private static Method findEnabledMethod() {
         if (!FabricLoader.getInstance().isModLoaded("minecraft_ai_agent")) return null;
@@ -25,7 +27,22 @@ public final class AiAgentCursorCompat {
         }
     }
 
-    public static boolean isAvailable() { return IS_ENABLED != null; }
+    private static Method findToggleMethod() {
+        if (IS_ENABLED == null) return null;
+        try {
+            return Class.forName(CURSOR_CLASS).getMethod("toggle", MinecraftClient.class);
+        } catch (ReflectiveOperationException | LinkageError ignored) {
+            return null;
+        }
+    }
+
+    public static boolean isAvailable() {
+        return IS_ENABLED != null;
+    }
+
+    public static boolean canControl() {
+        return IS_ENABLED != null && TOGGLE != null;
+    }
 
     public static boolean isEnabled() {
         if (IS_ENABLED == null) return false;
@@ -36,7 +53,17 @@ public final class AiAgentCursorCompat {
         }
     }
 
-    /** GLFW coordinates stay current while AI Agent consumes Minecraft Mouse callbacks. */
+    /** Toggles AI Agent's cursor and returns its state after the call. */
+    public static boolean toggle(MinecraftClient client) {
+        if (TOGGLE == null || client == null) return false;
+        try {
+            TOGGLE.invoke(null, client);
+            return isEnabled();
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            return false;
+        }
+    }
+
     public static Pointer getScaledPointer(MinecraftClient client) {
         if (client == null) return new Pointer(0.0, 0.0);
         Window window = client.getWindow();
@@ -44,10 +71,13 @@ public final class AiAgentCursorCompat {
             DoubleBuffer x = stack.mallocDouble(1);
             DoubleBuffer y = stack.mallocDouble(1);
             GLFW.glfwGetCursorPos(window.getHandle(), x, y);
-            return new Pointer(x.get(0) * window.getScaledWidth() / Math.max(1.0, window.getWidth()),
-                    y.get(0) * window.getScaledHeight() / Math.max(1.0, window.getHeight()));
+            return new Pointer(
+                    x.get(0) * window.getScaledWidth() / Math.max(1.0, window.getWidth()),
+                    y.get(0) * window.getScaledHeight() / Math.max(1.0, window.getHeight())
+            );
         }
     }
 
-    public record Pointer(double x, double y) {}
+    public record Pointer(double x, double y) {
+    }
 }
