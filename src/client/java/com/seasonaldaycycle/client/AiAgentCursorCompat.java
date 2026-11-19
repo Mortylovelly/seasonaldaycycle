@@ -9,11 +9,15 @@ import org.lwjgl.system.MemoryStack;
 import java.lang.reflect.Method;
 import java.nio.DoubleBuffer;
 
-/** Optional bridge to AI Agent's public free-cursor API. */
+/**
+ * Read-only bridge to the public cursor state owned by Minecraft AI Agent 0.3.19.
+ *
+ * Vertex never unlocks, locks, or toggles the cursor. When AI Agent is absent or its
+ * free cursor (G) is disabled, Vertex deliberately does not process pointer input.
+ */
 public final class AiAgentCursorCompat {
     private static final String CURSOR_CLASS = "com.mortylovelly.minecraftai.client.AiFreeCursor";
     private static final Method IS_ENABLED = findEnabledMethod();
-    private static final Method TOGGLE = findToggleMethod();
 
     private AiAgentCursorCompat() {
     }
@@ -27,21 +31,8 @@ public final class AiAgentCursorCompat {
         }
     }
 
-    private static Method findToggleMethod() {
-        if (IS_ENABLED == null) return null;
-        try {
-            return Class.forName(CURSOR_CLASS).getMethod("toggle", MinecraftClient.class);
-        } catch (ReflectiveOperationException | LinkageError ignored) {
-            return null;
-        }
-    }
-
     public static boolean isAvailable() {
         return IS_ENABLED != null;
-    }
-
-    public static boolean canControl() {
-        return IS_ENABLED != null && TOGGLE != null;
     }
 
     public static boolean isEnabled() {
@@ -53,29 +44,42 @@ public final class AiAgentCursorCompat {
         }
     }
 
-    /** Toggles AI Agent's cursor and returns its state after the call. */
-    public static boolean toggle(MinecraftClient client) {
-        if (TOGGLE == null || client == null) return false;
-        try {
-            TOGGLE.invoke(null, client);
-            return isEnabled();
-        } catch (ReflectiveOperationException | RuntimeException ignored) {
+    public static boolean shouldHandleInput(MinecraftClient client) {
+        if (!isEnabled() || client == null || client.player == null || client.world == null) {
             return false;
         }
+        long window = client.getWindow().getHandle();
+        return GLFW.glfwGetInputMode(window, GLFW.GLFW_CURSOR) != GLFW.GLFW_CURSOR_DISABLED;
     }
 
+    /** Uses the exact GLFW-to-scaled-window conversion used by AI Agent's MouseMixin. */
     public static Pointer getScaledPointer(MinecraftClient client) {
         if (client == null) return new Pointer(0.0, 0.0);
         Window window = client.getWindow();
         try (MemoryStack stack = MemoryStack.stackPush()) {
-            DoubleBuffer x = stack.mallocDouble(1);
-            DoubleBuffer y = stack.mallocDouble(1);
-            GLFW.glfwGetCursorPos(window.getHandle(), x, y);
+            DoubleBuffer cursorX = stack.mallocDouble(1);
+            DoubleBuffer cursorY = stack.mallocDouble(1);
+            GLFW.glfwGetCursorPos(window.getHandle(), cursorX, cursorY);
             return new Pointer(
-                    x.get(0) * window.getScaledWidth() / Math.max(1.0, window.getWidth()),
-                    y.get(0) * window.getScaledHeight() / Math.max(1.0, window.getHeight())
+                    scaledX(cursorX.get(0), window),
+                    scaledY(cursorY.get(0), window)
             );
         }
+    }
+
+    /** Converts a cursor callback's raw GLFW coordinates exactly like AI Agent. */
+    public static Pointer toScaledPointer(MinecraftClient client, double rawX, double rawY) {
+        if (client == null) return new Pointer(0.0, 0.0);
+        Window window = client.getWindow();
+        return new Pointer(scaledX(rawX, window), scaledY(rawY, window));
+    }
+
+    private static double scaledX(double rawX, Window window) {
+        return rawX * window.getScaledWidth() / (double) window.getWidth();
+    }
+
+    private static double scaledY(double rawY, Window window) {
+        return rawY * window.getScaledHeight() / (double) window.getHeight();
     }
 
     public record Pointer(double x, double y) {
