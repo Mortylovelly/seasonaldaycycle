@@ -9,12 +9,16 @@ import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-/** Persistent scale shared by every Vertex panel. */
+/**
+ * Shared panel scale using the same range and resize behaviour as AI Agent's Logs HUD.
+ */
 public final class VertexUiConfig {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Path PATH = FabricLoader.getInstance().getConfigDir().resolve("vertex-ui.json");
-    private static final float MIN_SCALE = 0.55f;
-    private static final float MAX_SCALE = 1.40f;
+    private static final int CONFIG_VERSION = 2;
+    private static final float MIN_SCALE = 0.25f;
+    private static final float MAX_SCALE = 1.6f;
+    private static final float DEFAULT_SCALE = 300.0f / 360.0f;
     private static Values values = new Values();
 
     private VertexUiConfig() {
@@ -26,7 +30,13 @@ public final class VertexUiConfig {
             if (Files.exists(PATH)) {
                 try (Reader reader = Files.newBufferedReader(PATH)) {
                     Values loaded = GSON.fromJson(reader, Values.class);
-                    if (loaded != null) values = loaded;
+                    if (loaded != null) {
+                        if (loaded.version < CONFIG_VERSION) {
+                            loaded.scale = DEFAULT_SCALE;
+                            loaded.version = CONFIG_VERSION;
+                        }
+                        values = loaded;
+                    }
                 }
             }
         } catch (Exception ignored) {
@@ -34,6 +44,7 @@ public final class VertexUiConfig {
         }
         if (values == null) values = new Values();
         values.scale = clamp(values.scale);
+        values.version = CONFIG_VERSION;
         save();
     }
 
@@ -41,13 +52,19 @@ public final class VertexUiConfig {
         return values.scale;
     }
 
-    public static void adjustScale(float delta) {
-        values.scale = clamp(values.scale + delta);
+    public static void setScale(float scale) {
+        float sanitized = clamp(scale);
+        if (Math.abs(values.scale - sanitized) < 0.0001f) return;
+        values.scale = sanitized;
         save();
     }
 
+    public static void adjustScale(float delta) {
+        setScale(values.scale + delta);
+    }
+
     private static float clamp(float scale) {
-        if (!Float.isFinite(scale)) return 0.85f;
+        if (!Float.isFinite(scale)) return DEFAULT_SCALE;
         return Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale));
     }
 
@@ -63,6 +80,7 @@ public final class VertexUiConfig {
     }
 
     private static final class Values {
-        float scale = 0.85f;
+        int version = CONFIG_VERSION;
+        float scale = DEFAULT_SCALE;
     }
 }
