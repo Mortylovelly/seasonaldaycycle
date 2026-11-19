@@ -19,6 +19,10 @@ public final class ModConfig {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("seasonaldaycycle.json");
     private static Config values = new Config();
+    private static Double syncedSpringDayRatio;
+    private static Double syncedSummerDayRatio;
+    private static Double syncedAutumnDayRatio;
+    private static Double syncedWinterDayRatio;
 
     private ModConfig() {}
 
@@ -77,6 +81,47 @@ public final class ModConfig {
         return sanitizeCycleLengthTicks(cycleLengthTicks) / DEFAULT_TOTAL_BASE_TICKS;
     }
 
+    public static double getSpringDayRatio() { return syncedSpringDayRatio != null ? syncedSpringDayRatio : getDayRatio(values.spring); }
+    public static double getSummerDayRatio() { return syncedSummerDayRatio != null ? syncedSummerDayRatio : getDayRatio(values.summer); }
+    public static double getAutumnDayRatio() { return syncedAutumnDayRatio != null ? syncedAutumnDayRatio : getDayRatio(values.autumn); }
+    public static double getWinterDayRatio() { return syncedWinterDayRatio != null ? syncedWinterDayRatio : getDayRatio(values.winter); }
+
+    /** Receives server-authoritative proportions for an online world; these are not written to the local config file. */
+    public static void setSyncedSeasonDayRatios(float spring, float summer, float autumn, float winter) {
+        syncedSpringDayRatio = sanitizeRatio(spring);
+        syncedSummerDayRatio = sanitizeRatio(summer);
+        syncedAutumnDayRatio = sanitizeRatio(autumn);
+        syncedWinterDayRatio = sanitizeRatio(winter);
+    }
+
+    public static void clearSyncedSeasonDayRatios() {
+        syncedSpringDayRatio = null;
+        syncedSummerDayRatio = null;
+        syncedAutumnDayRatio = null;
+        syncedWinterDayRatio = null;
+    }
+
+    private static double sanitizeRatio(double ratio) {
+        if (!Double.isFinite(ratio)) return 0.5;
+        return Math.max(0.001, Math.min(0.999, ratio));
+    }
+
+    private static double getDayRatio(SeasonConfig season) {
+        double total = season.dayTicks + season.nightTicks;
+        return total > 0.0 ? season.dayTicks / total : 0.5;
+    }
+
+    public static double getDayRatioForSubSeason(String subSeason) {
+        if (subSeason == null) return getSpringDayRatio();
+        return switch (subSeason) {
+            case "EARLY_SPRING", "MID_SPRING", "LATE_SPRING" -> getSpringDayRatio();
+            case "EARLY_SUMMER", "MID_SUMMER", "LATE_SUMMER" -> getSummerDayRatio();
+            case "EARLY_AUTUMN", "MID_AUTUMN", "LATE_AUTUMN" -> getAutumnDayRatio();
+            case "EARLY_WINTER", "MID_WINTER", "LATE_WINTER" -> getWinterDayRatio();
+            default -> getSpringDayRatio();
+        };
+    }
+
     public static double getSpringDayTicks() { return getSpringDayTicks(getCycleLengthTicks()); }
     public static double getSpringNightTicks() { return getSpringNightTicks(getCycleLengthTicks()); }
     public static double getSummerDayTicks() { return getSummerDayTicks(getCycleLengthTicks()); }
@@ -86,14 +131,36 @@ public final class ModConfig {
     public static double getWinterDayTicks() { return getWinterDayTicks(getCycleLengthTicks()); }
     public static double getWinterNightTicks() { return getWinterNightTicks(getCycleLengthTicks()); }
 
-    public static double getSpringDayTicks(long cycleLengthTicks) { return 36000.0 * getCycleScale(cycleLengthTicks); }
-    public static double getSpringNightTicks(long cycleLengthTicks) { return 36000.0 * getCycleScale(cycleLengthTicks); }
-    public static double getSummerDayTicks(long cycleLengthTicks) { return 42000.0 * getCycleScale(cycleLengthTicks); }
-    public static double getSummerNightTicks(long cycleLengthTicks) { return 30000.0 * getCycleScale(cycleLengthTicks); }
-    public static double getAutumnDayTicks(long cycleLengthTicks) { return 36000.0 * getCycleScale(cycleLengthTicks); }
-    public static double getAutumnNightTicks(long cycleLengthTicks) { return 36000.0 * getCycleScale(cycleLengthTicks); }
-    public static double getWinterDayTicks(long cycleLengthTicks) { return 30000.0 * getCycleScale(cycleLengthTicks); }
-    public static double getWinterNightTicks(long cycleLengthTicks) { return 42000.0 * getCycleScale(cycleLengthTicks); }
+    public static double getSpringDayTicks(long cycleLengthTicks) { return sanitizeCycleLengthTicks(cycleLengthTicks) * getSpringDayRatio(); }
+    public static double getSpringNightTicks(long cycleLengthTicks) { return sanitizeCycleLengthTicks(cycleLengthTicks) * (1.0 - getSpringDayRatio()); }
+    public static double getSummerDayTicks(long cycleLengthTicks) { return sanitizeCycleLengthTicks(cycleLengthTicks) * getSummerDayRatio(); }
+    public static double getSummerNightTicks(long cycleLengthTicks) { return sanitizeCycleLengthTicks(cycleLengthTicks) * (1.0 - getSummerDayRatio()); }
+    public static double getAutumnDayTicks(long cycleLengthTicks) { return sanitizeCycleLengthTicks(cycleLengthTicks) * getAutumnDayRatio(); }
+    public static double getAutumnNightTicks(long cycleLengthTicks) { return sanitizeCycleLengthTicks(cycleLengthTicks) * (1.0 - getAutumnDayRatio()); }
+    public static double getWinterDayTicks(long cycleLengthTicks) { return sanitizeCycleLengthTicks(cycleLengthTicks) * getWinterDayRatio(); }
+    public static double getWinterNightTicks(long cycleLengthTicks) { return sanitizeCycleLengthTicks(cycleLengthTicks) * (1.0 - getWinterDayRatio()); }
+
+    public static double getDayTicksForSubSeason(String subSeason, long cycleLengthTicks) {
+        if (subSeason == null) return getSpringDayTicks(cycleLengthTicks);
+        return switch (subSeason) {
+            case "EARLY_SPRING", "MID_SPRING", "LATE_SPRING" -> getSpringDayTicks(cycleLengthTicks);
+            case "EARLY_SUMMER", "MID_SUMMER", "LATE_SUMMER" -> getSummerDayTicks(cycleLengthTicks);
+            case "EARLY_AUTUMN", "MID_AUTUMN", "LATE_AUTUMN" -> getAutumnDayTicks(cycleLengthTicks);
+            case "EARLY_WINTER", "MID_WINTER", "LATE_WINTER" -> getWinterDayTicks(cycleLengthTicks);
+            default -> getSpringDayTicks(cycleLengthTicks);
+        };
+    }
+
+    public static double getNightTicksForSubSeason(String subSeason, long cycleLengthTicks) {
+        if (subSeason == null) return getSpringNightTicks(cycleLengthTicks);
+        return switch (subSeason) {
+            case "EARLY_SPRING", "MID_SPRING", "LATE_SPRING" -> getSpringNightTicks(cycleLengthTicks);
+            case "EARLY_SUMMER", "MID_SUMMER", "LATE_SUMMER" -> getSummerNightTicks(cycleLengthTicks);
+            case "EARLY_AUTUMN", "MID_AUTUMN", "LATE_AUTUMN" -> getAutumnNightTicks(cycleLengthTicks);
+            case "EARLY_WINTER", "MID_WINTER", "LATE_WINTER" -> getWinterNightTicks(cycleLengthTicks);
+            default -> getSpringNightTicks(cycleLengthTicks);
+        };
+    }
 
     private static final class Config {
         long cycleLengthTicks = DEFAULT_CYCLE_LENGTH_TICKS;

@@ -1,11 +1,9 @@
 package com.seasonaldaycycle;
 
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.world.GameRules;
 import net.minecraft.world.World;
 
-import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.WeakHashMap;
 
@@ -14,9 +12,6 @@ public final class DayCycleHandler {
     private static final long VANILLA_DAY_END = 12000L;
     private static final long VANILLA_CYCLE = 24000L;
     private static final long EXTERNAL_CHANGE_THRESHOLD = 200L;
-
-    private static final String SERENE_SEASONS_MOD_ID = "sereneseasons";
-    private static final String SEASON_HELPER_CLASS = "sereneseasons.api.season.SeasonHelper";
 
     private DayCycleHandler() {}
 
@@ -41,7 +36,12 @@ public final class DayCycleHandler {
 
         long timeInDay = Math.floorMod(currentTime, VANILLA_CYCLE);
         boolean isDay = timeInDay < VANILLA_DAY_END;
-        String subSeason = getCurrentSubSeason(level);
+        if (!state.seasonInitialized || ++state.seasonRefreshTicks >= 20) {
+            state.cachedSubSeason = getCurrentSubSeason(level);
+            state.seasonInitialized = true;
+            state.seasonRefreshTicks = 0;
+        }
+        String subSeason = state.cachedSubSeason;
         long cycleLengthTicks = DayCycleWorldConfig.getCycleLengthTicks(level);
 
         double realDayTicks = getRealDayTicks(subSeason, cycleLengthTicks);
@@ -60,22 +60,13 @@ public final class DayCycleHandler {
     }
 
     public static String getCurrentSubSeason(ServerWorld level) {
-        if (!FabricLoader.getInstance().isModLoaded(SERENE_SEASONS_MOD_ID)) {
-            return null;
-        }
+        SereneSeasonsCompat.SeasonInfo info = SereneSeasonsCompat.getSeasonInfo(level);
+        return info.available() ? info.subSeasonName() : null;
+    }
 
-        try {
-            Class<?> helperClass = Class.forName(SEASON_HELPER_CLASS);
-            Method getSeasonState = helperClass.getMethod("getSeasonState", ServerWorld.class);
-            Object seasonState = getSeasonState.invoke(null, level);
-            if (seasonState == null) return null;
-
-            Method getSubSeason = seasonState.getClass().getMethod("getSubSeason");
-            Object subSeason = getSubSeason.invoke(seasonState);
-            return subSeason == null ? null : subSeason.toString();
-        } catch (ReflectiveOperationException | RuntimeException ignored) {
-            return null;
-        }
+    public static void invalidateSeasonCache(ServerWorld level) {
+        State state = STATES.get(level);
+        if (state != null) state.seasonInitialized = false;
     }
 
     public static double getRealDayTicks(String subSeason) {
@@ -111,5 +102,8 @@ public final class DayCycleHandler {
     private static final class State {
         double timeDecimalAccumulator = 0.0;
         long lastKnownTime = -1L;
+        String cachedSubSeason;
+        int seasonRefreshTicks;
+        boolean seasonInitialized;
     }
 }

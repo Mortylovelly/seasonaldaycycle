@@ -52,8 +52,10 @@ public final class DayCycleCommand {
         long minLeft = realSecondsLeft / 60;
         long secLeft = realSecondsLeft % 60;
 
+        long elapsedDays = Math.max(0L, Math.floorDiv(level.getTimeOfDay(), 24000L));
         source.sendFeedback(() -> Text.literal("[SeasonalDayCycle]\n" +
                 "Сезон: " + getSeasonName(subSeason) + "\n" +
+                "Прошло дней: " + elapsedDays + "\n" +
                 "Фаза: " + phase + "\n" +
                 "Полные сутки: " + formatMinutes(cycleTicks) + "\n" +
                 "Длина дня: " + formatMinutes(dayTicks) + "\n" +

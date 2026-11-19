@@ -1,7 +1,9 @@
 package com.seasonaldaycycle.client;
 
 import com.seasonaldaycycle.ModConfig;
+import com.seasonaldaycycle.SereneSeasonsCompat;
 import com.seasonaldaycycle.network.SetDayCycleLengthPayload;
+import com.seasonaldaycycle.network.SetSeasonPayload;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
@@ -14,11 +16,12 @@ import org.lwjgl.glfw.GLFW;
 
 public final class DayCycleScreen {
     private static final int PANEL_WIDTH = 360;
-    private static final int PANEL_HEIGHT = 252;
+    private static final int DAY_PANEL_HEIGHT = 280;
+    private static final int SEASON_PANEL_HEIGHT = 360;
     private static final int HEADER_HEIGHT = 34;
     private static final int SLIDER_WIDTH = 218;
     private static final int SLIDER_HEIGHT = 7;
-    private static final int BUTTON_HEIGHT = 24;
+    private static final int BUTTON_HEIGHT = 20;
     private static final int CLOCK_CARD_WIDTH = 104;
     private static final int CLOCK_CARD_HEIGHT = 126;
     private static final float UI_SCALE = 0.40f;
@@ -35,13 +38,24 @@ public final class DayCycleScreen {
             20L * 60L * 20L,
             30L * 60L * 20L,
             60L * 60L * 20L,
+            2L * 60L * 60L * 20L,
+            3L * 60L * 60L * 20L,
             6L * 60L * 60L * 20L,
             24L * 60L * 60L * 20L
     };
 
     private static final String[] PRESET_LABELS = {
-            "1 с", "20 м", "30 м", "1 ч", "6 ч", "24 ч"
+            "1 с", "20 м", "30 м", "1 ч", "2 ч", "3 ч", "6 ч", "24 ч"
     };
+
+    private static final String[] SUB_SEASON_NAMES = {
+            "Ранняя весна", "Середина весны", "Поздняя весна",
+            "Раннее лето", "Середина лета", "Позднее лето",
+            "Ранняя осень", "Середина осени", "Поздняя осень",
+            "Ранняя зима", "Середина зимы", "Поздняя зима"
+    };
+
+    private static boolean serverCanEdit;
 
     private static DayCycleScreen ACTIVE;
 
@@ -51,6 +65,11 @@ public final class DayCycleScreen {
     private int miniX;
     private int miniY;
     private boolean minimized;
+    private boolean showSeasonsPage;
+    private String seasonActionMessage = "";
+    private long seasonActionUntil;
+    private SereneSeasonsCompat.SeasonInfo cachedSeasonInfo = SereneSeasonsCompat.SeasonInfo.unavailable();
+    private long nextSeasonRefreshMillis;
     private boolean draggingPanel;
     private boolean draggingSlider;
     private boolean draggingMini;
@@ -139,12 +158,18 @@ public final class DayCycleScreen {
         var textRenderer = client.textRenderer;
         int left = panelX + 18;
         int right = panelX + PANEL_WIDTH - 18;
-        int contentTop = panelY + HEADER_HEIGHT + 12;
+        int contentTop = panelY + HEADER_HEIGHT + 30;
 
         context.drawTextWithShadow(textRenderer, Text.literal("Настройки суток"), left, panelY + 11, 0xFFFFFFFF);
         context.drawTextWithShadow(textRenderer, Text.literal("скорость времени"), left, panelY + 23, 0xFFC0C6CD);
         drawMinimizeButton(context, mouseX, mouseY);
         drawCloseButton(context, mouseX, mouseY);
+        drawTabs(context, mouseX, mouseY);
+
+        if (showSeasonsPage) {
+            drawSeasonContent(context, left, right, contentTop, mouseX, mouseY);
+            return;
+        }
 
         context.drawTextWithShadow(textRenderer, Text.literal("ПОЛНЫЕ СУТКИ"), left, contentTop, 0xFFD0D5DB);
         drawCenteredText(context, Text.literal(formatDuration(cycleLengthTicks)), left + 109, contentTop + 16, 0xFFFFFFFF);
@@ -163,9 +188,9 @@ public final class DayCycleScreen {
 
         drawClockCard(context, right - CLOCK_CARD_WIDTH, contentTop);
 
-        int infoY = panelY + PANEL_HEIGHT - 34;
+        int infoY = panelY + getPanelHeight() - 34;
         context.drawTextWithShadow(textRenderer, Text.literal("Скорость: " + formatSpeed()), left, infoY, 0xFFE2E6EA);
-        drawRightText(context, Text.literal("Пропорции сезонов сохраняются"), right, infoY, 0xFF929AA4);
+        drawRightText(context, Text.literal("День и ночь масштабируются по сезону"), right, infoY, 0xFF929AA4);
 
         long now = System.currentTimeMillis();
         if (savedUntil > now) {
@@ -175,11 +200,139 @@ public final class DayCycleScreen {
         }
     }
 
+    private void drawTabs(DrawContext context, int mouseX, int mouseY) {
+        int x = panelX + 18;
+        int y = panelY + HEADER_HEIGHT + 5;
+        drawTab(context, x, y, 112, "СУТОЧНЫЙ ЦИКЛ", !showSeasonsPage, inside(mouseX, mouseY, x, y, 112, 20));
+        drawTab(context, x + 118, y, 112, "СЕЗОНЫ", showSeasonsPage, inside(mouseX, mouseY, x + 118, y, 112, 20));
+    }
+
+    private void drawTab(DrawContext context, int x, int y, int width, String label, boolean selected, boolean hovered) {
+        int fill = selected ? 0xAA737B84 : (hovered ? 0x995B626A : 0x77444A52);
+        context.fill(x, y, x + width, y + 20, fill);
+        context.fill(x, y, x + width, y + 1, selected ? 0xFFE0E4E8 : 0x889AA1A9);
+        context.drawCenteredTextWithShadow(MinecraftClient.getInstance().textRenderer, label, x + width / 2, y + 6, 0xFFF4F5F6);
+    }
+
+    private void drawSeasonContent(DrawContext context, int left, int right, int contentTop, int mouseX, int mouseY) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        var renderer = client.textRenderer;
+        long now = System.currentTimeMillis();
+        if (now >= nextSeasonRefreshMillis) {
+            cachedSeasonInfo = SereneSeasonsCompat.getSeasonInfo(client.world);
+            nextSeasonRefreshMillis = now + 500L;
+        }
+        SereneSeasonsCompat.SeasonInfo info = cachedSeasonInfo;
+
+        context.drawTextWithShadow(renderer, Text.literal("КАЛЕНДАРЬ И СЕЗОННЫЙ СВЕТОВОЙ ДЕНЬ"), left, contentTop, 0xFFD0D5DB);
+
+        if (!info.available()) {
+            context.drawTextWithShadow(renderer, Text.literal("Serene Seasons не найден или не ответил."), left, contentTop + 24, 0xFFFFC27A);
+            context.drawTextWithShadow(renderer, Text.literal("Сезонные кнопки доступны только с этим модом."), left, contentTop + 39, 0xFFB8C0C8);
+            context.drawTextWithShadow(renderer, Text.literal("Проверь, что Serene Seasons 9.1.0+ установлен на сервере."), left, contentTop + 54, 0xFF929AA4);
+            return;
+        }
+
+        int seasonIndex = info.subSeasonOrdinal() / 3;
+        String currentSeason = getSeasonName(seasonIndex);
+        String currentSubSeason = getSubSeasonName(info.subSeasonOrdinal());
+        long elapsedDays = Math.max(0L, Math.floorDiv(client.world.getTimeOfDay(), 24000L));
+        int dayInSeason = Math.floorMod(info.seasonCycleDay(), Math.max(1, info.daysPerSeason())) + 1;
+        long seasonRealTicks = Math.min(Long.MAX_VALUE, (long) info.daysPerSeason() * cycleLengthTicks);
+
+        context.drawTextWithShadow(renderer, Text.literal("Сейчас: " + currentSeason + " · " + currentSubSeason), left, contentTop + 15, 0xFFFFFFFF);
+        context.drawTextWithShadow(renderer, Text.literal("Прошло игровых дней: " + elapsedDays), left, contentTop + 28, 0xFFE2E6EA);
+        context.drawTextWithShadow(renderer, Text.literal("День сезона: " + dayInSeason + "/" + info.daysPerSeason()
+                + " · длительность: " + info.daysPerSeason() + " дней (~" + formatCompactDuration(seasonRealTicks) + ")"),
+                left, contentTop + 41, 0xFFBFC6CE);
+
+        int buttonsY = contentTop + 57;
+        int gap = 4;
+        int buttonWidth = (PANEL_WIDTH - 36 - gap * 3) / 4;
+        for (int i = 0; i < 4; i++) {
+            int buttonX = left + i * (buttonWidth + gap);
+            boolean selected = i == seasonIndex;
+            boolean hovered = inside(mouseX, mouseY, buttonX, buttonsY, buttonWidth, 24);
+            int fill = selected ? 0xAA737B84 : (hovered ? 0x995B626A : 0x77444A52);
+            context.fill(buttonX, buttonsY, buttonX + buttonWidth, buttonsY + 24, fill);
+            context.fill(buttonX, buttonsY, buttonX + buttonWidth, buttonsY + 1, selected ? 0xFFE0E4E8 : 0x889AA1A9);
+            context.drawCenteredTextWithShadow(renderer, getSeasonName(i), buttonX + buttonWidth / 2, buttonsY + 8, 0xFFF4F5F6);
+        }
+
+        context.drawTextWithShadow(renderer, Text.literal("Сезон меняется через Serene Seasons; снег и лёд оттаивают постепенно."),
+                left, contentTop + 87, 0xFFBFC6CE);
+        String bigGlobeStatus = SereneSeasonsCompat.isBigGlobeLoaded()
+                ? "Big Globe: используются общие сезонные biome hooks"
+                : "Big Globe не обнаружен";
+        context.drawTextWithShadow(renderer, Text.literal(bigGlobeStatus), left, contentTop + 100, 0xFF9FD0A7);
+
+        int tableY = contentTop + 117;
+        context.drawTextWithShadow(renderer, Text.literal("12 ПЕРИОДОВ ГОДА · ДОЛЯ ДНЯ И НОЧИ"), left, tableY, 0xFFD0D5DB);
+        for (int i = 0; i < 12; i++) {
+            int column = i / 6;
+            int row = i % 6;
+            int columnX = left + column * 164;
+            int rowY = tableY + 14 + row * 21;
+            String enumName = getSubSeasonEnumName(i);
+            double dayRatio = ModConfig.getDayRatioForSubSeason(enumName);
+            double nightRatio = 1.0 - dayRatio;
+            double dayTicks = ModConfig.getDayTicksForSubSeason(enumName, cycleLengthTicks);
+            double nightTicks = ModConfig.getNightTicksForSubSeason(enumName, cycleLengthTicks);
+
+            context.drawTextWithShadow(renderer, Text.literal(SUB_SEASON_NAMES[i]), columnX, rowY, 0xFFFFFFFF);
+            String durations = "Д " + Math.round(dayRatio * 100.0) + "% " + formatCompactDuration((long) dayTicks)
+                    + " · Н " + Math.round(nightRatio * 100.0) + "% " + formatCompactDuration((long) nightTicks);
+            context.drawTextWithShadow(renderer, Text.literal(durations), columnX, rowY + 9, 0xFFB3BBC4);
+        }
+
+        if (seasonActionUntil > now) {
+            drawRightText(context, Text.literal(seasonActionMessage), right, panelY + getPanelHeight() - 34, 0xFFFFDB91);
+        } else if (!serverCanEdit) {
+            drawRightText(context, Text.literal("Для смены сезона нужны права OP 2"), right, panelY + getPanelHeight() - 34, 0xFFFFC27A);
+        } else {
+            drawRightText(context, Text.literal("Смена сезона доступна"), right, panelY + getPanelHeight() - 34, 0xFF9FD0A7);
+        }
+    }
+
+    private static String getSeasonName(int seasonIndex) {
+        return switch (seasonIndex) {
+            case 0 -> "Весна";
+            case 1 -> "Лето";
+            case 2 -> "Осень";
+            case 3 -> "Зима";
+            default -> "Неизвестно";
+        };
+    }
+
+    private static String getSubSeasonName(int ordinal) {
+        return ordinal >= 0 && ordinal < SUB_SEASON_NAMES.length ? SUB_SEASON_NAMES[ordinal] : "Неизвестно";
+    }
+
+    private static String getSubSeasonEnumName(int ordinal) {
+        String[] names = {
+                "EARLY_SPRING", "MID_SPRING", "LATE_SPRING",
+                "EARLY_SUMMER", "MID_SUMMER", "LATE_SUMMER",
+                "EARLY_AUTUMN", "MID_AUTUMN", "LATE_AUTUMN",
+                "EARLY_WINTER", "MID_WINTER", "LATE_WINTER"
+        };
+        return ordinal >= 0 && ordinal < names.length ? names[ordinal] : "MID_SPRING";
+    }
+
+    private static String formatCompactDuration(long ticks) {
+        long totalSeconds = Math.max(0L, ticks / 20L);
+        long hours = totalSeconds / 3600L;
+        long minutes = (totalSeconds % 3600L) / 60L;
+        long seconds = totalSeconds % 60L;
+        if (hours > 0L) return hours + "ч" + (minutes > 0L ? " " + minutes + "м" : "");
+        if (minutes > 0L) return minutes + "м";
+        return seconds + "с";
+    }
+
     private void drawAmbientLeaves(DrawContext context) {
         int left = panelX + 2;
         int top = panelY + 2;
         int right = panelX + PANEL_WIDTH - 2;
-        int bottom = panelY + PANEL_HEIGHT - 2;
+        int bottom = panelY + getPanelHeight() - 2;
         long tick = System.currentTimeMillis() / 85L;
 
         for (int i = 0; i < 12; i++) {
@@ -199,13 +352,13 @@ public final class DayCycleScreen {
     }
 
     private void drawPanelGlass(DrawContext context) {
-        context.fill(panelX + 3, panelY + 5, panelX + PANEL_WIDTH + 3, panelY + PANEL_HEIGHT + 5, 0x32000000);
-        context.fill(panelX, panelY, panelX + PANEL_WIDTH, panelY + PANEL_HEIGHT, 0x8A666B73);
+        context.fill(panelX + 3, panelY + 5, panelX + PANEL_WIDTH + 3, panelY + getPanelHeight() + 5, 0x32000000);
+        context.fill(panelX, panelY, panelX + PANEL_WIDTH, panelY + getPanelHeight(), 0x8A666B73);
         context.fill(panelX + 1, panelY + 1, panelX + PANEL_WIDTH - 1, panelY + HEADER_HEIGHT, 0x9B777C84);
         context.fill(panelX + 1, panelY + HEADER_HEIGHT, panelX + PANEL_WIDTH - 1, panelY + HEADER_HEIGHT + 1, 0xAABDC3CB);
-        context.fill(panelX + 1, panelY + PANEL_HEIGHT - 1, panelX + PANEL_WIDTH - 1, panelY + PANEL_HEIGHT, 0x8A949AA3);
-        context.fill(panelX + 1, panelY + 1, panelX + 2, panelY + PANEL_HEIGHT - 1, 0x8A949AA3);
-        context.fill(panelX + PANEL_WIDTH - 2, panelY + 1, panelX + PANEL_WIDTH - 1, panelY + PANEL_HEIGHT - 1, 0x8A949AA3);
+        context.fill(panelX + 1, panelY + getPanelHeight() - 1, panelX + PANEL_WIDTH - 1, panelY + getPanelHeight(), 0x8A949AA3);
+        context.fill(panelX + 1, panelY + 1, panelX + 2, panelY + getPanelHeight() - 1, 0x8A949AA3);
+        context.fill(panelX + PANEL_WIDTH - 2, panelY + 1, panelX + PANEL_WIDTH - 1, panelY + getPanelHeight() - 1, 0x8A949AA3);
         context.fill(panelX + 12, panelY + HEADER_HEIGHT + 7, panelX + PANEL_WIDTH - 12, panelY + HEADER_HEIGHT + 8, 0x28FFFFFF);
     }
 
@@ -237,15 +390,19 @@ public final class DayCycleScreen {
 
     private void drawPresetSection(DrawContext context, int x, int y, int mouseX, int mouseY) {
         int gap = 4;
-        int buttonWidth = (SLIDER_WIDTH - gap * 5) / PRESET_TICKS.length;
+        int columns = 4;
+        int buttonWidth = (SLIDER_WIDTH - gap * (columns - 1)) / columns;
         for (int i = 0; i < PRESET_TICKS.length; i++) {
-            int buttonX = x + i * (buttonWidth + gap);
-            boolean hover = inside(mouseX, mouseY, buttonX, y, buttonWidth, BUTTON_HEIGHT);
+            int column = i % columns;
+            int row = i / columns;
+            int buttonX = x + column * (buttonWidth + gap);
+            int buttonY = y + row * (BUTTON_HEIGHT + 3);
+            boolean hover = inside(mouseX, mouseY, buttonX, buttonY, buttonWidth, BUTTON_HEIGHT);
             boolean selected = cycleLengthTicks == PRESET_TICKS[i];
             int color = selected ? 0xAA737B84 : (hover ? 0x995B626A : 0x77444A52);
-            context.fill(buttonX, y, buttonX + buttonWidth, y + BUTTON_HEIGHT, color);
-            context.fill(buttonX, y, buttonX + buttonWidth, y + 1, selected ? 0xFFE0E4E8 : 0x889AA1A9);
-            context.drawCenteredTextWithShadow(MinecraftClient.getInstance().textRenderer, PRESET_LABELS[i], buttonX + buttonWidth / 2, y + 7, 0xFFF4F5F6);
+            context.fill(buttonX, buttonY, buttonX + buttonWidth, buttonY + BUTTON_HEIGHT, color);
+            context.fill(buttonX, buttonY, buttonX + buttonWidth, buttonY + 1, selected ? 0xFFE0E4E8 : 0x889AA1A9);
+            context.drawCenteredTextWithShadow(MinecraftClient.getInstance().textRenderer, PRESET_LABELS[i], buttonX + buttonWidth / 2, buttonY + 6, 0xFFF4F5F6);
         }
     }
 
@@ -318,6 +475,47 @@ public final class DayCycleScreen {
                 return true;
             }
 
+            int tabY = panelY + HEADER_HEIGHT + 5;
+            if (inside(x, y, panelX + 18, tabY, 112, 20)) {
+                showSeasonsPage = false;
+                clampPanel(MinecraftClient.getInstance().getWindow().getScaledWidth(), MinecraftClient.getInstance().getWindow().getScaledHeight());
+                playUiSound(1.0f);
+                return true;
+            }
+            if (inside(x, y, panelX + 136, tabY, 112, 20)) {
+                showSeasonsPage = true;
+                clampPanel(MinecraftClient.getInstance().getWindow().getScaledWidth(), MinecraftClient.getInstance().getWindow().getScaledHeight());
+                playUiSound(1.0f);
+                return true;
+            }
+
+            if (showSeasonsPage) {
+                SereneSeasonsCompat.SeasonInfo seasonInfo = cachedSeasonInfo;
+                int buttonsY = panelY + HEADER_HEIGHT + 30 + 57;
+                int gap = 4;
+                int buttonWidth = (PANEL_WIDTH - 36 - gap * 3) / 4;
+                for (int i = 0; i < 4; i++) {
+                    int buttonX = panelX + 18 + i * (buttonWidth + gap);
+                    if (inside(x, y, buttonX, buttonsY, buttonWidth, 24)) {
+                        if (!seasonInfo.available()) {
+                            seasonActionMessage = "Serene Seasons не установлен";
+                            seasonActionUntil = System.currentTimeMillis() + 1800L;
+                        } else if (!serverCanEdit) {
+                            seasonActionMessage = "Нужны права оператора (OP 2)";
+                            seasonActionUntil = System.currentTimeMillis() + 1800L;
+                        } else if (MinecraftClient.getInstance().getNetworkHandler() != null) {
+                            ClientPlayNetworking.send(new SetSeasonPayload(i));
+                            seasonActionMessage = "Запрос смены сезона отправлен";
+                            seasonActionUntil = System.currentTimeMillis() + 1800L;
+                        }
+                        playUiSound(1.05f);
+                        return true;
+                    }
+                }
+                if (inside(x, y, panelX, panelY, PANEL_WIDTH, getPanelHeight())) return true;
+                return false;
+            }
+
             if (inside(x, y, panelX, panelY, PANEL_WIDTH - 64, HEADER_HEIGHT)) {
                 draggingPanel = true;
                 dragOffsetX = (int) mouseX - panelX;
@@ -326,7 +524,7 @@ public final class DayCycleScreen {
             }
 
             int sliderX = panelX + 18;
-            int sliderY = panelY + HEADER_HEIGHT + 12 + 52;
+            int sliderY = panelY + HEADER_HEIGHT + 30 + 52;
             if (inside(x, y, sliderX - 8, sliderY - 8, SLIDER_WIDTH + 16, 24)) {
                 draggingSlider = true;
                 updateSliderFromMouse(x);
@@ -334,12 +532,16 @@ public final class DayCycleScreen {
                 return true;
             }
 
-            int presetY = panelY + HEADER_HEIGHT + 12 + 83 + 16;
+            int presetY = panelY + HEADER_HEIGHT + 30 + 83 + 16;
             int gap = 4;
-            int buttonWidth = (SLIDER_WIDTH - gap * 5) / PRESET_TICKS.length;
+            int columns = 4;
+            int buttonWidth = (SLIDER_WIDTH - gap * (columns - 1)) / columns;
             for (int i = 0; i < PRESET_TICKS.length; i++) {
-                int buttonX = panelX + 18 + i * (buttonWidth + gap);
-                if (inside(x, y, buttonX, presetY, buttonWidth, BUTTON_HEIGHT)) {
+                int column = i % columns;
+                int row = i / columns;
+                int buttonX = panelX + 18 + column * (buttonWidth + gap);
+                int buttonY = presetY + row * (BUTTON_HEIGHT + 3);
+                if (inside(x, y, buttonX, buttonY, buttonWidth, BUTTON_HEIGHT)) {
                     cycleLengthTicks = ModConfig.sanitizeCycleLengthTicks(PRESET_TICKS[i]);
                     playUiSound(1.05f);
                     commitCurrentValue();
@@ -347,7 +549,7 @@ public final class DayCycleScreen {
                 }
             }
 
-            if (inside(x, y, panelX, panelY, PANEL_WIDTH, PANEL_HEIGHT)) return true;
+            if (inside(x, y, panelX, panelY, PANEL_WIDTH, getPanelHeight())) return true;
             return false;
         }
 
@@ -465,15 +667,20 @@ public final class DayCycleScreen {
         savedUntil = System.currentTimeMillis() + 900L;
     }
 
-    public void setCycleLengthFromServer(long ticks) {
+    public void setCycleLengthFromServer(long ticks, boolean canEdit) {
         this.cycleLengthTicks = ModConfig.sanitizeCycleLengthTicks(ticks);
+        serverCanEdit = canEdit;
         this.serverSynced = true;
         this.savedUntil = System.currentTimeMillis() + 600L;
     }
 
+    public static void updateCanEdit(boolean canEdit) {
+        serverCanEdit = canEdit;
+    }
+
     private boolean isSliderHovered(int mouseX, int mouseY) {
         int sliderX = panelX + 18;
-        int sliderY = panelY + HEADER_HEIGHT + 12 + 52;
+        int sliderY = panelY + HEADER_HEIGHT + 30 + 52;
         return inside(mouseX, mouseY, sliderX - 8, sliderY - 8, SLIDER_WIDTH + 16, 24);
     }
 
@@ -485,7 +692,7 @@ public final class DayCycleScreen {
     }
 
     private long sliderMidpointTicks() {
-        return 20L * 60L * 20L;
+        return Math.round(Math.sqrt((double) MIN_TICKS * (double) MAX_TICKS) / STEP) * STEP;
     }
 
     private String formatSpeed() {
@@ -539,7 +746,11 @@ public final class DayCycleScreen {
     }
 
     private int visualPanelHeight() {
-        return Math.max(1, Math.round(PANEL_HEIGHT * UI_SCALE));
+        return Math.max(1, Math.round(getPanelHeight() * UI_SCALE));
+    }
+
+    private int getPanelHeight() {
+        return showSeasonsPage ? SEASON_PANEL_HEIGHT : DAY_PANEL_HEIGHT;
     }
 
     private void clampPanel(int width, int height) {

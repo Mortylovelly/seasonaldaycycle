@@ -38,10 +38,18 @@ public final class SeasonalDayCycleClient implements ClientModInitializer {
             long ticks = ModConfig.sanitizeCycleLengthTicks(payload.ticks());
             knownCycleLengthTicks = ticks;
             ModConfig.setCycleLengthTicks(ticks);
+            ModConfig.setSyncedSeasonDayRatios(
+                    payload.springDayRatio(),
+                    payload.summerDayRatio(),
+                    payload.autumnDayRatio(),
+                    payload.winterDayRatio()
+            );
 
             DayCycleScreen screen = DayCycleScreen.getActive();
             if (screen != null) {
-                screen.setCycleLengthFromServer(ticks);
+                screen.setCycleLengthFromServer(ticks, payload.canEdit());
+            } else {
+                DayCycleScreen.updateCanEdit(payload.canEdit());
             }
         });
 
@@ -88,6 +96,7 @@ public final class SeasonalDayCycleClient implements ClientModInitializer {
 
         knownCycleLengthTicks = ModConfig.DEFAULT_CYCLE_LENGTH_TICKS;
         ModConfig.setCycleLengthTicks(ModConfig.DEFAULT_CYCLE_LENGTH_TICKS);
+        ModConfig.clearSyncedSeasonDayRatios();
         cursorMode = false;
         client.mouse.lockCursor();
     }
