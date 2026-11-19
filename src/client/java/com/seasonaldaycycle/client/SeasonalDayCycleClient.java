@@ -41,7 +41,7 @@ public final class SeasonalDayCycleClient implements ClientModInitializer {
             MinecraftClient client = MinecraftClient.getInstance();
             int width = client.getWindow().getScaledWidth();
             int height = client.getWindow().getScaledHeight();
-            VertexCursorController.Pointer pointer = VertexCursorController.getScaledPointer(client);
+            AiAgentCursorCompat.Pointer pointer = AiAgentCursorCompat.getScaledPointer(client);
             if (VertexPanelController.isActive()) {
                 VertexPanelController.render(drawContext,
                         (int) Math.round(pointer.x()), (int) Math.round(pointer.y()), 0.0f);
