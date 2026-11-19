@@ -285,10 +285,8 @@ public final class VertexNavigationPanel {
             context.drawCenteredTextWithShadow(renderer, "←", panelX + 25, panelY + 9,
                     backHover ? 0xFFFFFFFF : 0xFFE9EDF1);
             context.drawTextWithShadow(renderer, Text.literal("WORLD"), panelX + 50, panelY + 11, 0xFFFFFFFF);
-            context.drawTextWithShadow(renderer, Text.literal("мир"), panelX + 50, panelY + 23, 0xFFC0C6CD);
         } else {
             context.drawTextWithShadow(renderer, Text.literal("Vertex"), panelX + 18, panelY + 9, 0xFFFFFFFF);
-            context.drawTextWithShadow(renderer, Text.literal("Universal utility"), panelX + 18, panelY + 22, 0xFFC0C6CD);
         }
 
         int minimizeX = panelX + width - 57;
