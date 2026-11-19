@@ -8,11 +8,11 @@ import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
 
 public final class VertexNavigationPanel {
-    private static final int WIDTH_MAIN = 400;
-    private static final int HEIGHT_MAIN = 280;
+    private static final int WIDTH_MAIN = 360;
+    private static final int HEIGHT_MAIN = 252;
     private static final int WIDTH_PAGE = 360;
     private static final int HEIGHT_PAGE = 252;
-    private static final int HEADER_HEIGHT = 34;
+    private static final int HEADER_HEIGHT = 29;
     private static final int MINI_SIZE = 42;
     private static final int MINI_PADDING = 8;
 
@@ -28,6 +28,10 @@ public final class VertexNavigationPanel {
     private boolean initialized;
     private boolean minimized;
     private boolean draggingPanel;
+    private boolean resizingPanel;
+    private double resizeStartMouseX;
+    private double resizeStartMouseY;
+    private float resizeStartScale;
     private boolean draggingMini;
     private boolean miniPressCandidate;
     private int dragOffsetX;
@@ -87,6 +91,7 @@ public final class VertexNavigationPanel {
         } else {
             drawMainPage(context);
         }
+        drawResizeGrip(context, panelWidth, panelHeight);
 
         context.getMatrices().pop();
     }
@@ -118,16 +123,12 @@ public final class VertexNavigationPanel {
             int width = getPanelWidth();
             int height = getPanelHeight();
 
-            int scaleMinusX = panelX + width - 109;
-            int scalePlusX = panelX + width - 84;
-            if (inside(x, y, scaleMinusX, panelY + 6, 20, 22)) {
-                VertexUiConfig.adjustScale(-0.05f);
-                clampPanel(client.getWindow().getScaledWidth(), client.getWindow().getScaledHeight());
-                return true;
-            }
-            if (inside(x, y, scalePlusX, panelY + 6, 20, 22)) {
-                VertexUiConfig.adjustScale(0.05f);
-                clampPanel(client.getWindow().getScaledWidth(), client.getWindow().getScaledHeight());
+            if (inside(x, y, panelX + width - 14, panelY + height - 14, 14, 14)) {
+                resizingPanel = true;
+                resizeStartMouseX = mouseX;
+                resizeStartMouseY = mouseY;
+                resizeStartScale = VertexUiConfig.getScale();
+                draggingPanel = false;
                 return true;
             }
 
@@ -188,8 +189,9 @@ public final class VertexNavigationPanel {
                 return true;
             }
 
-            boolean dragged = draggingPanel;
+            boolean dragged = draggingPanel || resizingPanel;
             draggingPanel = false;
+            resizingPanel = false;
             return dragged;
         }
 
@@ -208,6 +210,17 @@ public final class VertexNavigationPanel {
                 miniY = (int) mouseY - dragOffsetY;
                 clampMini(MinecraftClient.getInstance().getWindow().getScaledWidth(), MinecraftClient.getInstance().getWindow().getScaledHeight());
             }
+            return true;
+        }
+
+        if (resizingPanel) {
+            double horizontalDelta = (mouseX - resizeStartMouseX) / (double) getPanelWidth();
+            double verticalDelta = (mouseY - resizeStartMouseY) / (double) Math.max(1, getPanelHeight());
+            double scaleDelta = Math.abs(horizontalDelta) >= Math.abs(verticalDelta)
+                    ? horizontalDelta : verticalDelta;
+            VertexUiConfig.setScale(resizeStartScale + (float) scaleDelta);
+            clampPanel(MinecraftClient.getInstance().getWindow().getScaledWidth(),
+                    MinecraftClient.getInstance().getWindow().getScaledHeight());
             return true;
         }
 
@@ -251,13 +264,14 @@ public final class VertexNavigationPanel {
     }
 
     private void drawPanelGlass(DrawContext context, int width, int height) {
-        context.fill(panelX + 3, panelY + 5, panelX + width + 3, panelY + height + 5, 0x32000000);
-        context.fill(panelX, panelY, panelX + width, panelY + height, COLOR_PANEL);
-        context.fill(panelX + 1, panelY + 1, panelX + width - 1, panelY + HEADER_HEIGHT, COLOR_HEADER);
-        context.fill(panelX + 1, panelY + HEADER_HEIGHT, panelX + width - 1, panelY + HEADER_HEIGHT + 1, COLOR_LINE);
-        context.fill(panelX + 1, panelY + height - 1, panelX + width - 1, panelY + height, 0x8A949AA3);
-        context.fill(panelX + 1, panelY + 1, panelX + 2, panelY + height - 1, 0x8A949AA3);
-        context.fill(panelX + width - 2, panelY + 1, panelX + width - 1, panelY + height - 1, 0x8A949AA3);
+        int right = panelX + width;
+        int bottom = panelY + height;
+        context.fill(panelX + 3, panelY + 5, right + 3, bottom + 5, 0x32000000);
+        drawRoundedPanel(context, panelX, panelY, right, bottom, 0xFF77818B);
+        drawRoundedPanel(context, panelX + 1, panelY + 1, right - 1, bottom - 1, 0xFF424B56);
+        drawRoundedPanel(context, panelX + 5, panelY + 5, right - 5, panelY + HEADER_HEIGHT + 7, 0xFF343D47);
+        context.fill(panelX + 12, panelY + HEADER_HEIGHT + 7, right - 12,
+                panelY + HEADER_HEIGHT + 8, 0x286B7886);
     }
 
     private void drawHeader(DrawContext context, int mouseX, int mouseY, int width) {
@@ -276,8 +290,6 @@ public final class VertexNavigationPanel {
             context.drawTextWithShadow(renderer, Text.literal("Vertex"), panelX + 18, panelY + 9, 0xFFFFFFFF);
             context.drawTextWithShadow(renderer, Text.literal("Universal utility"), panelX + 18, panelY + 22, 0xFFC0C6CD);
         }
-
-        drawScaleControls(context, mouseX, mouseY, width);
 
         int minimizeX = panelX + width - 57;
         int closeX = panelX + width - 29;
@@ -357,21 +369,25 @@ public final class VertexNavigationPanel {
         context.getMatrices().pop();
     }
 
-    private void drawScaleControls(DrawContext context, int mouseX, int mouseY, int width) {
-        int y = panelY + 6;
-        int minusX = panelX + width - 109;
-        int plusX = panelX + width - 84;
-        context.drawTextWithShadow(MinecraftClient.getInstance().textRenderer,
-                Text.literal(Math.round(VertexUiConfig.getScale() * 100.0f) + "%"),
-                panelX + width - 146, y + 7, 0xFFE8EBEE);
-        drawScaleButton(context, minusX, y, "−", inside(mouseX, mouseY, minusX, y, 20, 22));
-        drawScaleButton(context, plusX, y, "+", inside(mouseX, mouseY, plusX, y, 20, 22));
+    private void drawResizeGrip(DrawContext context, int width, int height) {
+        int right = panelX + width - 5;
+        int bottom = panelY + height - 5;
+        int color = resizingPanel ? 0xFFEAF0F6 : 0xFF9BA8B5;
+        context.fill(right - 8, bottom - 1, right, bottom, color);
+        context.fill(right - 5, bottom - 4, right, bottom - 3, color);
+        context.fill(right - 2, bottom - 7, right, bottom - 6, color);
     }
 
-    private void drawScaleButton(DrawContext context, int x, int y, String label, boolean hovered) {
-        context.fill(x, y, x + 20, y + 22, hovered ? 0xCC5B626A : 0x88464A51);
-        context.drawCenteredTextWithShadow(MinecraftClient.getInstance().textRenderer,
-                label, x + 10, y + 2, hovered ? 0xFFFFFFFF : 0xFFE8EBEE);
+    private static void drawRoundedPanel(DrawContext context, int left, int top,
+                                         int right, int bottom, int color) {
+        if (right - left < 4 || bottom - top < 4) {
+            context.fill(left, top, right, bottom, color);
+            return;
+        }
+        context.fill(left + 4, top, right - 4, bottom, color);
+        context.fill(left + 2, top + 1, right - 2, bottom - 1, color);
+        context.fill(left + 1, top + 2, right - 1, bottom - 2, color);
+        context.fill(left, top + 4, right, bottom - 4, color);
     }
 
     private int toLogicalX(double mouseX) {
