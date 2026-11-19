@@ -12,7 +12,6 @@ public final class VertexNavigationPanel {
     private static final int HEIGHT_MAIN = 280;
     private static final int WIDTH_PAGE = 360;
     private static final int HEIGHT_PAGE = 252;
-    private static final float UI_SCALE = 1.0f;
     private static final int HEADER_HEIGHT = 34;
     private static final int MINI_SIZE = 42;
     private static final int MINI_PADDING = 8;
@@ -76,8 +75,9 @@ public final class VertexNavigationPanel {
         int panelHeight = getPanelHeight();
 
         context.getMatrices().push();
-        context.getMatrices().translate(panelX * (1.0f - UI_SCALE), panelY * (1.0f - UI_SCALE), 0.0f);
-        context.getMatrices().scale(UI_SCALE, UI_SCALE, 1.0f);
+        float uiScale = getUiScale();
+        context.getMatrices().translate(panelX * (1.0f - uiScale), panelY * (1.0f - uiScale), 0.0f);
+        context.getMatrices().scale(uiScale, uiScale, 1.0f);
 
         drawPanelGlass(context, panelWidth, panelHeight);
         drawHeader(context, mouseX, mouseY, panelWidth);
@@ -216,8 +216,8 @@ public final class VertexNavigationPanel {
             int panelWidth = getPanelWidth();
             int panelHeight = getPanelHeight();
             if (panelX == 0 && panelY == 0) {
-                panelX = (width - Math.round(panelWidth * UI_SCALE)) / 2;
-                panelY = Math.max(6, (height - Math.round(panelHeight * UI_SCALE)) / 2);
+                panelX = (width - Math.round(panelWidth * getUiScale())) / 2;
+                panelY = Math.max(6, (height - Math.round(panelHeight * getUiScale())) / 2);
             }
             if (miniX < 0 || miniY < 0) {
                 miniX = panelX;
@@ -343,16 +343,25 @@ public final class VertexNavigationPanel {
     }
 
     private int toLogicalX(double mouseX) {
-        return panelX + (int) Math.round((mouseX - panelX) / UI_SCALE);
+        return panelX + (int) Math.round((mouseX - panelX) / getUiScale());
     }
 
     private int toLogicalY(double mouseY) {
-        return panelY + (int) Math.round((mouseY - panelY) / UI_SCALE);
+        return panelY + (int) Math.round((mouseY - panelY) / getUiScale());
+    }
+
+    private float getUiScale() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        int width = client.getWindow().getScaledWidth();
+        int height = client.getWindow().getScaledHeight();
+        float fitWidth = Math.max(0.25f, (width - 12.0f) / getPanelWidth());
+        float fitHeight = Math.max(0.25f, (height - 12.0f) / getPanelHeight());
+        return Math.min(1.0f, Math.min(fitWidth, fitHeight));
     }
 
     private void clampPanel(int width, int height) {
-        int visualWidth = Math.max(1, Math.round(getPanelWidth() * UI_SCALE));
-        int visualHeight = Math.max(1, Math.round(getPanelHeight() * UI_SCALE));
+        int visualWidth = Math.max(1, Math.round(getPanelWidth() * getUiScale()));
+        int visualHeight = Math.max(1, Math.round(getPanelHeight() * getUiScale()));
         panelX = Math.max(6, Math.min(panelX, width - visualWidth - 6));
         panelY = Math.max(6, Math.min(panelY, height - visualHeight - 6));
     }

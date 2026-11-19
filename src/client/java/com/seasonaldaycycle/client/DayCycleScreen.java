@@ -24,7 +24,6 @@ public final class DayCycleScreen {
     private static final int BUTTON_HEIGHT = 20;
     private static final int CLOCK_CARD_WIDTH = 104;
     private static final int CLOCK_CARD_HEIGHT = 126;
-    private static final float UI_SCALE = 1.0f;
 
     private static final int MINI_PANEL_SIZE = 42;
     private static final int MINI_HITBOX_PADDING = 8;
@@ -126,8 +125,9 @@ public final class DayCycleScreen {
         }
 
         context.getMatrices().push();
-        context.getMatrices().translate(panelX * (1.0f - UI_SCALE), panelY * (1.0f - UI_SCALE), 0.0f);
-        context.getMatrices().scale(UI_SCALE, UI_SCALE, 1.0f);
+        float uiScale = getUiScale();
+        context.getMatrices().translate(panelX * (1.0f - uiScale), panelY * (1.0f - uiScale), 0.0f);
+        context.getMatrices().scale(uiScale, uiScale, 1.0f);
 
         int localMouseX = toLogicalX(mouseX);
         int localMouseY = toLogicalY(mouseY);
@@ -169,8 +169,8 @@ public final class DayCycleScreen {
                 Text.literal(showHudSettingsPage ? "информация на экране" : "скорость времени"),
                 left, panelY + 23, 0xFFC0C6CD);
         context.drawTextWithShadow(textRenderer,
-                Text.literal(AiAgentCursorCompat.isEnabled() ? "G · КУРСОР АКТИВЕН" : "G · НАЖМИ"),
-                panelX + 204, panelY + 11, AiAgentCursorCompat.isEnabled() ? 0xFFBFE9C6 : 0xFFFFDB91);
+                Text.literal(AiAgentCursorCompat.isEnabled() ? "G · КУРСОР" : "G · НАЖМИ G"),
+                panelX + 238, panelY + 11, AiAgentCursorCompat.isEnabled() ? 0xFFBFE9C6 : 0xFFFFDB91);
         drawMinimizeButton(context, mouseX, mouseY);
         drawCloseButton(context, mouseX, mouseY);
         drawTabs(context, mouseX, mouseY);
@@ -278,12 +278,14 @@ public final class DayCycleScreen {
             context.drawCenteredTextWithShadow(renderer, getSeasonName(i), buttonX + buttonWidth / 2, buttonsY + 8, 0xFFF4F5F6);
         }
 
-        context.drawTextWithShadow(renderer, Text.literal("Сезон меняется через Serene Seasons; снег и лёд оттаивают постепенно."),
-                left, contentTop + 87, 0xFFBFC6CE);
+        drawFittedText(context, renderer,
+                "Сезон меняется через Serene Seasons; снег и лёд оттаивают постепенно.",
+                left, contentTop + 87, right - left, 0xFFBFC6CE);
         String bigGlobeStatus = SereneSeasonsCompat.isBigGlobeLoaded()
                 ? "Big Globe: используются общие сезонные biome hooks"
                 : "Big Globe не обнаружен";
-        context.drawTextWithShadow(renderer, Text.literal(bigGlobeStatus), left, contentTop + 100, 0xFF9FD0A7);
+        drawFittedText(context, renderer, bigGlobeStatus, left, contentTop + 100,
+                right - left, 0xFF9FD0A7);
 
         int tableY = contentTop + 117;
         context.drawTextWithShadow(renderer, Text.literal("12 ПЕРИОДОВ ГОДА · ДОЛЯ ДНЯ И НОЧИ"), left, tableY, 0xFFD0D5DB);
@@ -298,10 +300,10 @@ public final class DayCycleScreen {
             double dayTicks = ModConfig.getDayTicksForSubSeason(enumName, cycleLengthTicks);
             double nightTicks = ModConfig.getNightTicksForSubSeason(enumName, cycleLengthTicks);
 
-            context.drawTextWithShadow(renderer, Text.literal(SUB_SEASON_NAMES[i]), columnX, rowY, 0xFFFFFFFF);
+            drawFittedText(context, renderer, SUB_SEASON_NAMES[i], columnX, rowY, 158, 0xFFFFFFFF);
             String durations = "Д " + Math.round(dayRatio * 100.0) + "% " + formatCompactDuration((long) dayTicks)
                     + " · Н " + Math.round(nightRatio * 100.0) + "% " + formatCompactDuration((long) nightTicks);
-            context.drawTextWithShadow(renderer, Text.literal(durations), columnX, rowY + 9, 0xFFB3BBC4);
+            drawFittedText(context, renderer, durations, columnX, rowY + 9, 158, 0xFFB3BBC4);
         }
 
         if (seasonActionUntil > now) {
@@ -915,19 +917,28 @@ public final class DayCycleScreen {
     }
 
     private int toLogicalX(double mouseX) {
-        return panelX + (int) Math.round((mouseX - panelX) / UI_SCALE);
+        return panelX + (int) Math.round((mouseX - panelX) / getUiScale());
     }
 
     private int toLogicalY(double mouseY) {
-        return panelY + (int) Math.round((mouseY - panelY) / UI_SCALE);
+        return panelY + (int) Math.round((mouseY - panelY) / getUiScale());
+    }
+
+    private float getUiScale() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        int width = client.getWindow().getScaledWidth();
+        int height = client.getWindow().getScaledHeight();
+        float fitWidth = Math.max(0.25f, (width - 12.0f) / PANEL_WIDTH);
+        float fitHeight = Math.max(0.25f, (height - 12.0f) / getPanelHeight());
+        return Math.min(1.0f, Math.min(fitWidth, fitHeight));
     }
 
     private int visualPanelWidth() {
-        return Math.max(1, Math.round(PANEL_WIDTH * UI_SCALE));
+        return Math.max(1, Math.round(PANEL_WIDTH * getUiScale()));
     }
 
     private int visualPanelHeight() {
-        return Math.max(1, Math.round(getPanelHeight() * UI_SCALE));
+        return Math.max(1, Math.round(getPanelHeight() * getUiScale()));
     }
 
     private int getPanelHeight() {
@@ -950,6 +961,12 @@ public final class DayCycleScreen {
                 miniY - MINI_HITBOX_PADDING,
                 MINI_PANEL_SIZE + MINI_HITBOX_PADDING * 2,
                 MINI_PANEL_SIZE + MINI_HITBOX_PADDING * 2);
+    }
+
+    private static void drawFittedText(DrawContext context, net.minecraft.client.font.TextRenderer renderer,
+                                       String value, int x, int y, int maxWidth, int color) {
+        String fitted = renderer.trimToWidth(value, Math.max(1, maxWidth));
+        context.drawTextWithShadow(renderer, Text.literal(fitted), x, y, color);
     }
 
     private static void drawCenteredText(DrawContext context, Text text, int centerX, int y, int color) {
