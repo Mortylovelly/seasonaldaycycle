@@ -15,7 +15,7 @@ import java.nio.file.Path;
 public final class VertexUiConfig {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Path PATH = FabricLoader.getInstance().getConfigDir().resolve("vertex-ui.json");
-    private static final int CONFIG_VERSION = 2;
+    private static final int CONFIG_VERSION = 3;
     private static final float MIN_SCALE = 0.25f;
     private static final float MAX_SCALE = 1.6f;
     private static final float DEFAULT_SCALE = 300.0f / 360.0f;
