@@ -22,6 +22,7 @@
   },
   "suggests": {
     "sereneseasons": ">=9.1.0",
-    "minecraft_ai_agent": ">=0.3.20"
+    "minecraft_ai_agent": ">=0.3.20",
+    "seamlesssleep": ">=2.5.2"
   }
 }
