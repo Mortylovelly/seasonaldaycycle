@@ -685,7 +685,9 @@ public final class DayCycleScreen {
 
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.world != null) {
-            long time = Math.floorMod(client.world.getTimeOfDay(), 24000L);
+            double visualTime = SkyAngleInterpolationState.getVisualTime(
+                    client.world, client.world.getTime(), 1.0f);
+            long time = Math.floorMod((long) Math.floor(visualTime), 24000L);
             drawCenteredText(context, Text.literal(formatMinecraftTime(time)), x + CLOCK_CARD_WIDTH / 2, y + 82, 0xFFFFFFFF);
             drawCenteredText(context, Text.literal(time < 12000L ? "День" : "Ночь"), x + CLOCK_CARD_WIDTH / 2, y + 98, time < 12000L ? 0xFFFFD37C : 0xFFB8C8FF);
         }
