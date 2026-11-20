@@ -3,6 +3,7 @@ package com.seasonaldaycycle.client;
 import com.seasonaldaycycle.ModConfig;
 import com.seasonaldaycycle.network.DayCycleLengthSyncPayload;
 import com.seasonaldaycycle.network.OpenDayCycleScreenPayload;
+import com.seasonaldaycycle.network.SleepSettingsSyncPayload;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
@@ -41,10 +42,15 @@ public final class SeasonalDayCycleClient implements ClientModInitializer {
             else DayCycleScreen.updateCanEdit(payload.canEdit());
         });
 
+        ClientPlayNetworking.registerGlobalReceiver(SleepSettingsSyncPayload.TYPE, (payload, player, responseSender) ->
+                MinecraftClient.getInstance().execute(() ->
+                        DayCycleScreen.updateSleepSettingsFromServer(
+                                payload.available(), payload.multiplier(), payload.canEdit())));
+
         ClientPlayNetworking.registerGlobalReceiver(OpenDayCycleScreenPayload.TYPE, (payload, player, responseSender) ->
                 VertexPanelController.openMain(MinecraftClient.getInstance()));
 
-        HudRenderCallback.EVENT.register((drawContext, tickCounter) -> {
+        HudRenderCallback.EVENT.register((drawContext, tickDelta) -> {
             MinecraftClient client = MinecraftClient.getInstance();
             int width = client.getWindow().getScaledWidth();
             int height = client.getWindow().getScaledHeight();
@@ -53,7 +59,7 @@ public final class SeasonalDayCycleClient implements ClientModInitializer {
                 VertexPanelController.render(drawContext,
                         (int) Math.round(pointer.x()), (int) Math.round(pointer.y()), 0.0f);
             } else {
-                VertexHudOverlay.render(drawContext, width, height);
+                VertexHudOverlay.render(drawContext, width, height, tickDelta);
             }
         });
     }
@@ -65,6 +71,7 @@ public final class SeasonalDayCycleClient implements ClientModInitializer {
             DayCycleScreen screen = DayCycleScreen.getActive();
             if (screen != null) screen.close();
         }
+        DayCycleScreen.resetSleepSettingsState();
         knownCycleLengthTicks = ModConfig.DEFAULT_CYCLE_LENGTH_TICKS;
         ModConfig.setCycleLengthTicks(ModConfig.DEFAULT_CYCLE_LENGTH_TICKS);
         ModConfig.clearSyncedSeasonDayRatios();
