@@ -31,7 +31,7 @@ public final class VertexHudOverlay {
         nextRefreshTick = 0L;
     }
 
-    public static void render(DrawContext context, int screenWidth, int screenHeight) {
+    public static void render(DrawContext context, int screenWidth, int screenHeight, float tickDelta) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (!VertexHudConfig.isEnabled() || client.player == null || client.world == null) return;
         if (client.world.getRegistryKey() != World.OVERWORLD) return;
@@ -43,29 +43,37 @@ public final class VertexHudOverlay {
             nextRefreshTick = clientTick + 20L;
         }
 
-        long timeOfDay = Math.floorMod(client.world.getTimeOfDay(), 24000L);
-        long elapsedDays = Math.max(0L, Math.floorDiv(client.world.getTimeOfDay(), 24000L));
-        long cycleNumber = elapsedDays + 1L;
-        String seasonText = "СЕЗОН —";
-        String daysLeftText = "ДО СМЕНЫ —";
-        String dayDuration = "—";
+        // Use the same continuous, cycle-aware clock as the sun and moon.
+        double visualTime = SkyAngleInterpolationState.getVisualTime(client.world, clientTick, tickDelta);
+        long absoluteTime = (long) Math.floor(visualTime);
+        long timeOfDay = Math.floorMod(absoluteTime, 24000L);
+        long elapsedDays = Math.max(0L, Math.floorDiv(absoluteTime, 24000L));
+        long daysPerYear = 365L;
+        long year = Math.floorDiv(elapsedDays, daysPerYear) + 1L;
+        long dayOfYear = Math.floorMod(elapsedDays, daysPerYear) + 1L;
 
         long cycleTicks = SeasonalDayCycleClient.getKnownCycleLengthTicks();
         if (cycleTicks <= 0L) cycleTicks = ModConfig.DEFAULT_CYCLE_LENGTH_TICKS;
+
+        String seasonText = "СЕЗОН —";
         if (cachedSeason.available()) {
             int ordinal = Math.max(0, Math.min(11, cachedSeason.subSeasonOrdinal()));
             int seasonIndex = ordinal / 3;
-            seasonText = SEASONS[seasonIndex] + " / " + SUB_SEASONS[ordinal];
             int daysPerSeason = Math.max(1, cachedSeason.daysPerSeason());
             int dayInSeason = Math.floorMod(cachedSeason.seasonCycleDay(), daysPerSeason) + 1;
-            daysLeftText = "ДО СМЕНЫ " + Math.max(0, daysPerSeason - dayInSeason) + " ДН.";
-            long dayTicks = Math.round(ModConfig.getDayTicksForSubSeason(cachedSeason.subSeasonName(), cycleTicks));
-            dayDuration = formatDuration(dayTicks);
+            seasonText = SEASONS[seasonIndex] + " / " + SUB_SEASONS[ordinal]
+                    + " " + dayInSeason + "/" + daysPerSeason;
         }
 
-        String firstLine = "ДЕНЬ " + elapsedDays + "   •   ЦИКЛ #" + cycleNumber + "   •   " + seasonText;
-        String secondLine = daysLeftText + "   •   ВРЕМЯ " + formatMinecraftTime(timeOfDay)
-                + "   •   ДЕНЬ " + dayDuration + "   •   ЦИКЛ " + formatDuration(cycleTicks);
+        String subSeason = cachedSeason.available() ? cachedSeason.subSeasonName() : null;
+        long dayTicks = Math.round(ModConfig.getDayTicksForSubSeason(subSeason, cycleTicks));
+        long nightTicks = Math.round(ModConfig.getNightTicksForSubSeason(subSeason, cycleTicks));
+
+        String firstLine = "ГОД " + year + " • ДЕНЬ " + dayOfYear + "/" + daysPerYear
+                + " • " + seasonText;
+        String secondLine = "ВРЕМЯ " + formatMinecraftTime(timeOfDay)
+                + " • ДЕНЬ " + formatDuration(dayTicks)
+                + " • НОЧЬ " + formatDuration(nightTicks);
 
         TextRenderer renderer = client.textRenderer;
         float scale = VertexHudConfig.getScale();
@@ -75,8 +83,6 @@ public final class VertexHudOverlay {
         int logicalWidth = Math.max(firstWidth, secondWidth);
         int logicalHeight = renderer.fontHeight * 2 + lineGap;
 
-        // Shrink only as much as needed so neither line can leave the screen,
-        // even at low GUI resolutions or with unusually long localized text.
         float availableWidth = Math.max(1.0f, screenWidth - 4.0f);
         float availableHeight = Math.max(1.0f, screenHeight - 4.0f);
         float fitX = availableWidth / Math.max(1.0f, logicalWidth);
