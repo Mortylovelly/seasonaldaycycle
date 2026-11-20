@@ -22,6 +22,21 @@ public final class DayCycleHandler {
         State state = STATES.computeIfAbsent(level, ignored -> new State());
         long currentTime = level.getTimeOfDay();
 
+        // Seamless Sleep owns the Overworld clock while its eased night-skip is active.
+        // Pause our fractional day-cycle accumulator instead of competing with its time writes.
+        if (SeamlessSleepCompat.isServerSleepAnimationActive(level)) {
+            state.sleepAnimationWasActive = true;
+            state.timeDecimalAccumulator = 0.0;
+            state.lastKnownTime = currentTime;
+            return;
+        }
+        if (state.sleepAnimationWasActive) {
+            state.sleepAnimationWasActive = false;
+            state.timeDecimalAccumulator = 0.0;
+            state.lastKnownTime = currentTime;
+            return;
+        }
+
         if (state.lastKnownTime >= 0) {
             long diff = Math.abs(currentTime - state.lastKnownTime);
             if (diff > EXTERNAL_CHANGE_THRESHOLD && diff < VANILLA_CYCLE - EXTERNAL_CHANGE_THRESHOLD) {
@@ -105,5 +120,6 @@ public final class DayCycleHandler {
         String cachedSubSeason;
         int seasonRefreshTicks;
         boolean seasonInitialized;
+        boolean sleepAnimationWasActive;
     }
 }
