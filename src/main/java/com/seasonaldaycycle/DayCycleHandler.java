@@ -12,6 +12,7 @@ public final class DayCycleHandler {
     private static final long VANILLA_DAY_END = 12000L;
     private static final long VANILLA_CYCLE = 24000L;
     private static final long EXTERNAL_CHANGE_THRESHOLD = 200L;
+    private static final int SPEED_TRANSITION_TICKS = 40;
 
     private DayCycleHandler() {}
 
@@ -22,8 +23,7 @@ public final class DayCycleHandler {
         State state = STATES.computeIfAbsent(level, ignored -> new State());
         long currentTime = level.getTimeOfDay();
 
-        // Seamless Sleep owns the Overworld clock while its eased night-skip is active.
-        // Pause our fractional day-cycle accumulator instead of competing with its time writes.
+        // Seamless Sleep owns the Overworld clock during its animated night skip.
         if (SeamlessSleepCompat.isServerSleepAnimationActive(level)) {
             state.sleepAnimationWasActive = true;
             state.timeDecimalAccumulator = 0.0;
@@ -37,41 +37,95 @@ public final class DayCycleHandler {
             return;
         }
 
-        if (state.lastKnownTime >= 0) {
-            long diff = Math.abs(currentTime - state.lastKnownTime);
-            if (diff > EXTERNAL_CHANGE_THRESHOLD && diff < VANILLA_CYCLE - EXTERNAL_CHANGE_THRESHOLD) {
+        if (!state.seasonInitialized || ++state.seasonRefreshTicks >= 20) {
+            state.cachedSubSeason = getCurrentSubSeason(level);
+            state.seasonInitialized = true;
+            state.seasonRefreshTicks = 0;
+        }
+
+        long timeInDay = Math.floorMod(currentTime, VANILLA_CYCLE);
+        boolean isDay = timeInDay < VANILLA_DAY_END;
+        long cycleLengthTicks = DayCycleWorldConfig.getCycleLengthTicks(level);
+        double phaseTicks = isDay
+                ? getRealDayTicks(state.cachedSubSeason, cycleLengthTicks)
+                : getRealNightTicks(state.cachedSubSeason, cycleLengthTicks);
+        double targetSpeed = 12000.0 / Math.max(1.0, phaseTicks);
+
+        // Don't mistake a naturally fast cycle (down to one real second) for /time set.
+        // Compare the observed advance with the speed we actually applied last tick.
+        if (state.lastKnownTime >= 0L && state.speedInitialized) {
+            long observedAdvance = Math.abs(currentTime - state.lastKnownTime);
+            long expectedAdvance = Math.max(1L, Math.round(state.currentSpeed) + 1L);
+            long deviation = Math.abs(observedAdvance - expectedAdvance);
+            long jumpThreshold = Math.max(EXTERNAL_CHANGE_THRESHOLD,
+                    (long) Math.ceil(expectedAdvance * 0.5));
+            if (observedAdvance > EXTERNAL_CHANGE_THRESHOLD
+                    && observedAdvance < VANILLA_CYCLE - EXTERNAL_CHANGE_THRESHOLD
+                    && deviation > jumpThreshold) {
                 state.timeDecimalAccumulator = 0.0;
                 state.lastKnownTime = currentTime;
                 return;
             }
         }
 
+        updateSpeed(state, targetSpeed);
+
+        // Cancel vanilla's one-tick step; our fractional accumulator owns the clock.
         level.setTimeOfDay(currentTime - 1L);
         currentTime--;
 
-        long timeInDay = Math.floorMod(currentTime, VANILLA_CYCLE);
-        boolean isDay = timeInDay < VANILLA_DAY_END;
-        if (!state.seasonInitialized || ++state.seasonRefreshTicks >= 20) {
-            state.cachedSubSeason = getCurrentSubSeason(level);
-            state.seasonInitialized = true;
-            state.seasonRefreshTicks = 0;
-        }
-        String subSeason = state.cachedSubSeason;
-        long cycleLengthTicks = DayCycleWorldConfig.getCycleLengthTicks(level);
-
-        double realDayTicks = getRealDayTicks(subSeason, cycleLengthTicks);
-        double realNightTicks = getRealNightTicks(subSeason, cycleLengthTicks);
-        double speed = isDay ? 12000.0 / realDayTicks : 12000.0 / realNightTicks;
-
-        state.timeDecimalAccumulator += speed;
+        state.timeDecimalAccumulator += state.currentSpeed;
         long toAdd = (long) Math.floor(state.timeDecimalAccumulator);
         state.timeDecimalAccumulator -= toAdd;
 
         long newTime = currentTime + toAdd;
-        if (newTime < 0) newTime = Math.floorMod(newTime, VANILLA_CYCLE);
+        if (newTime < 0L) newTime = Math.floorMod(newTime, VANILLA_CYCLE);
 
         level.setTimeOfDay(newTime);
         state.lastKnownTime = newTime;
+    }
+
+    private static void updateSpeed(State state, double targetSpeed) {
+        if (!Double.isFinite(targetSpeed) || targetSpeed <= 0.0) {
+            targetSpeed = 1.0 / 24000.0;
+        }
+
+        if (!state.speedInitialized) {
+            state.speedInitialized = true;
+            state.currentSpeed = targetSpeed;
+            state.transitionStartSpeed = targetSpeed;
+            state.targetSpeed = targetSpeed;
+            state.speedTransitionElapsed = SPEED_TRANSITION_TICKS;
+            return;
+        }
+
+        double difference = Math.abs(targetSpeed - state.targetSpeed);
+        double threshold = Math.max(1.0E-9, Math.abs(targetSpeed) * 1.0E-5);
+        if (difference > threshold) {
+            // Restart the ramp from the current speed. Rapid slider changes therefore
+            // never reset the world clock or snap the sun to a new position.
+            state.transitionStartSpeed = state.currentSpeed;
+            state.targetSpeed = targetSpeed;
+            state.speedTransitionElapsed = 0;
+        }
+
+        if (state.speedTransitionElapsed < SPEED_TRANSITION_TICKS) {
+            state.speedTransitionElapsed++;
+            double progress = state.speedTransitionElapsed / (double) SPEED_TRANSITION_TICKS;
+            double eased = smootherStep(progress);
+            state.currentSpeed = state.transitionStartSpeed
+                    + (state.targetSpeed - state.transitionStartSpeed) * eased;
+        } else {
+            state.currentSpeed = state.targetSpeed;
+        }
+
+        // Day time must always move forward, including while slowing down.
+        state.currentSpeed = Math.max(1.0E-9, state.currentSpeed);
+    }
+
+    private static double smootherStep(double value) {
+        double x = Math.max(0.0, Math.min(1.0, value));
+        return x * x * x * (x * (x * 6.0 - 15.0) + 10.0);
     }
 
     public static String getCurrentSubSeason(ServerWorld level) {
@@ -121,5 +175,11 @@ public final class DayCycleHandler {
         int seasonRefreshTicks;
         boolean seasonInitialized;
         boolean sleepAnimationWasActive;
+
+        boolean speedInitialized;
+        double currentSpeed;
+        double transitionStartSpeed;
+        double targetSpeed;
+        int speedTransitionElapsed;
     }
 }
