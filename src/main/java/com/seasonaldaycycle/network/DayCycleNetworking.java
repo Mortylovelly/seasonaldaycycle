@@ -4,6 +4,8 @@ import com.seasonaldaycycle.DayCycleWorldConfig;
 import com.seasonaldaycycle.ModConfig;
 import com.seasonaldaycycle.DayCycleHandler;
 import com.seasonaldaycycle.SereneSeasonsCompat;
+import com.seasonaldaycycle.SeamlessSleepCompat;
+import net.minecraft.server.MinecraftServer;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -39,6 +41,22 @@ public final class DayCycleNetworking {
             }
         });
 
+        ServerPlayNetworking.registerGlobalReceiver(SetSleepDurationPayload.TYPE, (payload, player, responseSender) -> {
+            MinecraftServer server = player.getServer();
+            if (server == null) return;
+            server.execute(() -> {
+                if (!canEditSleepSettings(player)) {
+                    sendSleepSettingsState(player);
+                    return;
+                }
+                if (!SeamlessSleepCompat.setSleepAnimationDurationMultiplier(server, payload.multiplier())) {
+                    sendSleepSettingsState(player);
+                    return;
+                }
+                syncSleepSettingsState(server);
+            });
+        });
+
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> sendState(handler.player));
     }
 
@@ -56,6 +74,25 @@ public final class DayCycleNetworking {
                 (float) ModConfig.getAutumnDayRatio(),
                 (float) ModConfig.getWinterDayRatio()
         ));
+        sendSleepSettingsState(player);
+    }
+
+    private static boolean canEditSleepSettings(ServerPlayerEntity player) {
+        return player.getServer() != null
+                && (player.getServer().isSingleplayer() || player.hasPermissionLevel(3));
+    }
+
+    private static void sendSleepSettingsState(ServerPlayerEntity player) {
+        boolean available = SeamlessSleepCompat.isLoaded();
+        float multiplier = available ? SeamlessSleepCompat.getSleepAnimationDurationMultiplier() : 1.0f;
+        boolean canEdit = available && canEditSleepSettings(player);
+        ServerPlayNetworking.send(player, new SleepSettingsSyncPayload(available, multiplier, canEdit));
+    }
+
+    private static void syncSleepSettingsState(MinecraftServer server) {
+        for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
+            sendSleepSettingsState(player);
+        }
     }
 
     private static void syncWorldState(ServerPlayerEntity source) {
