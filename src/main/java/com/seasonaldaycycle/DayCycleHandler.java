@@ -33,6 +33,10 @@ public final class DayCycleHandler {
         if (state.sleepAnimationWasActive) {
             state.sleepAnimationWasActive = false;
             state.timeDecimalAccumulator = 0.0;
+            state.currentSpeed = Math.max(1.0E-9, state.currentSpeed * 0.01);
+            state.transitionStartSpeed = state.currentSpeed;
+            state.speedTransitionElapsed = 0;
+            state.forceSpeedTransition = true;
             state.lastKnownTime = currentTime;
             return;
         }
@@ -99,12 +103,13 @@ public final class DayCycleHandler {
 
         double difference = Math.abs(targetSpeed - state.targetSpeed);
         double threshold = Math.max(1.0E-9, Math.abs(targetSpeed) * 1.0E-5);
-        if (difference > threshold) {
+        if (state.forceSpeedTransition || difference > threshold) {
             // Restart the ramp from the current speed. Rapid slider changes therefore
             // never reset the world clock or snap the sun to a new position.
             state.transitionStartSpeed = state.currentSpeed;
             state.targetSpeed = targetSpeed;
             state.speedTransitionElapsed = 0;
+            state.forceSpeedTransition = false;
         }
 
         if (state.speedTransitionElapsed < SPEED_TRANSITION_TICKS) {
@@ -179,5 +184,6 @@ public final class DayCycleHandler {
         double transitionStartSpeed;
         double targetSpeed;
         int speedTransitionElapsed;
+        boolean forceSpeedTransition;
     }
 }
