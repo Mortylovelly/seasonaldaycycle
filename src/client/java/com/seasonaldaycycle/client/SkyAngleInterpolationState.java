@@ -35,6 +35,10 @@ public final class SkyAngleInterpolationState {
     public static synchronized void acceptServerTime(LunarWorldView lunarWorld, long serverTime, long clientTick) {
         if (!(lunarWorld instanceof World world) || !world.isClient()) return;
         State state = get(lunarWorld);
+        if (SeamlessSleepClientCompat.isSleepAnimationActive()) {
+            initialize(state, world.getTimeOfDay(), clientTick, world);
+            return;
+        }
         if (!state.initialized) {
             initialize(state, serverTime, clientTick, world);
             return;
@@ -60,6 +64,11 @@ public final class SkyAngleInterpolationState {
         State state = get(lunarWorld);
         if (!(lunarWorld instanceof World world) || !world.isClient()) {
             return lunarWorld.getLunarTime();
+        }
+        if (SeamlessSleepClientCompat.isSleepAnimationActive()) {
+            double sleepTime = lunarWorld.getLunarTime();
+            initialize(state, (long) sleepTime, clientTick, world);
+            return sleepTime;
         }
         if (!state.initialized) initialize(state, world.getLunarTime(), clientTick, world);
 
