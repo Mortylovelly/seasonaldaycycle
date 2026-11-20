@@ -47,6 +47,7 @@ public final class SkyAngleInterpolationState {
         }
 
         refreshSeason(state, world, clientTick);
+        resumeAfterSleepIfNeeded(state);
         advanceWholeTicks(state, clientTick);
         double error = shortestPhaseDifference(serverTime, state.visualTime);
 
@@ -76,6 +77,7 @@ public final class SkyAngleInterpolationState {
 
         if (!state.initialized) initialize(state, world.getLunarTime(), clientTick, world);
         refreshSeason(state, world, clientTick);
+        resumeAfterSleepIfNeeded(state);
         advanceWholeTicks(state, clientTick);
 
         double partial = Math.max(0.0, Math.min(1.0, tickDelta));
@@ -108,11 +110,27 @@ public final class SkyAngleInterpolationState {
 
         // Seamless Sleep owns the world clock during its own eased transition.
         // Keep the exact fractional position and resume from there when it finishes.
+        state.sleepAnimationWasActive = true;
         state.visualTime = sleepTime;
         state.lastClientTick = clientTick;
         state.lastSeasonRefresh = clientTick;
         state.subSeason = readSubSeason(world);
         state.correctionRemaining = 0.0;
+    }
+
+    private static void resumeAfterSleepIfNeeded(State state) {
+        if (!state.sleepAnimationWasActive) return;
+        state.sleepAnimationWasActive = false;
+
+        double target = getPhaseSpeed(state.visualTime, state.subSeason,
+                SeasonalDayCycleClient.getKnownCycleLengthTicks());
+        // Seamless Sleep eases to a stop at the end of its transition. Resume our
+        // normal day cycle from a very low speed, then smoothly accelerate again.
+        state.currentSpeed = Math.max(1.0E-9, Math.min(state.currentSpeed, target) * 0.01);
+        state.transitionStartSpeed = state.currentSpeed;
+        state.targetSpeed = target;
+        state.speedTransitionElapsed = 0;
+        state.speedInitialized = true;
     }
 
     private static void refreshSeason(State state, World world, long clientTick) {
@@ -253,5 +271,6 @@ public final class SkyAngleInterpolationState {
         private double transitionStartSpeed;
         private double targetSpeed;
         private int speedTransitionElapsed;
+        private boolean sleepAnimationWasActive;
     }
 }
