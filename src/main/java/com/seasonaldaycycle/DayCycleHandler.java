@@ -57,11 +57,9 @@ public final class DayCycleHandler {
             long observedAdvance = Math.abs(currentTime - state.lastKnownTime);
             long expectedAdvance = Math.max(1L, Math.round(state.currentSpeed) + 1L);
             long deviation = Math.abs(observedAdvance - expectedAdvance);
-            long jumpThreshold = Math.max(EXTERNAL_CHANGE_THRESHOLD,
-                    (long) Math.ceil(expectedAdvance * 0.5));
             if (observedAdvance > EXTERNAL_CHANGE_THRESHOLD
                     && observedAdvance < VANILLA_CYCLE - EXTERNAL_CHANGE_THRESHOLD
-                    && deviation > jumpThreshold) {
+                    && deviation > EXTERNAL_CHANGE_THRESHOLD) {
                 state.timeDecimalAccumulator = 0.0;
                 state.lastKnownTime = currentTime;
                 return;
