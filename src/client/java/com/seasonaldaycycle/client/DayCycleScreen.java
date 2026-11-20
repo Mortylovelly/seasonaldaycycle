@@ -1,9 +1,11 @@
 package com.seasonaldaycycle.client;
 
 import com.seasonaldaycycle.ModConfig;
+import com.seasonaldaycycle.SeamlessSleepCompat;
 import com.seasonaldaycycle.SereneSeasonsCompat;
 import com.seasonaldaycycle.network.SetDayCycleLengthPayload;
 import com.seasonaldaycycle.network.SetSeasonPayload;
+import com.seasonaldaycycle.network.SetSleepDurationPayload;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
@@ -55,6 +57,9 @@ public final class DayCycleScreen {
     };
 
     private static boolean serverCanEdit;
+    private static boolean serverHasSeamlessSleep;
+    private static float serverSleepDurationMultiplier = 1.0f;
+    private static boolean serverCanEditSleepDuration;
 
     private static DayCycleScreen ACTIVE;
 
@@ -66,8 +71,11 @@ public final class DayCycleScreen {
     private boolean minimized;
     private boolean showSeasonsPage;
     private boolean showHudSettingsPage;
+    private boolean showSleepSettingsPage;
     private boolean previousPageWasSeasons;
     private boolean draggingHudScale;
+    private boolean draggingSleepDuration;
+    private float sleepDurationPreview = 1.0f;
     private String seasonActionMessage = "";
     private long seasonActionUntil;
     private SereneSeasonsCompat.SeasonInfo cachedSeasonInfo = SereneSeasonsCompat.SeasonInfo.unavailable();
@@ -90,6 +98,7 @@ public final class DayCycleScreen {
 
     public DayCycleScreen() {
         this.cycleLengthTicks = ModConfig.getCycleLengthTicks();
+        this.sleepDurationPreview = serverSleepDurationMultiplier;
         ACTIVE = this;
     }
 
@@ -167,7 +176,9 @@ public final class DayCycleScreen {
         int right = panelX + PANEL_WIDTH - 18;
         int contentTop = panelY + HEADER_HEIGHT + 30;
 
-        String panelTitle = showHudSettingsPage
+        String panelTitle = showSleepSettingsPage
+                ? "Настройки сна"
+                : showHudSettingsPage
                 ? "Настройки HUD"
                 : showSeasonsPage ? "Календарь и сезоны" : "Настройки суток";
         context.drawTextWithShadow(textRenderer, Text.literal(panelTitle),
@@ -183,6 +194,11 @@ public final class DayCycleScreen {
 
         if (showSeasonsPage) {
             drawSeasonContent(context, left, right, contentTop, mouseX, mouseY);
+            return;
+        }
+
+        if (showSleepSettingsPage) {
+            drawSleepSettingsContent(context, left, right, contentTop, mouseX, mouseY);
             return;
         }
 
@@ -218,13 +234,59 @@ public final class DayCycleScreen {
     private void drawTabs(DrawContext context, int mouseX, int mouseY) {
         int x = panelX + 18;
         int y = panelY + HEADER_HEIGHT + 5;
+        if (hasSleepSettingsTab()) {
+            int width = 78;
+            String[] labels = {"ЦИКЛ", "СЕЗОНЫ", "HUD", "СОН"};
+            boolean[] selected = {
+                    !showSeasonsPage && !showHudSettingsPage && !showSleepSettingsPage,
+                    showSeasonsPage, showHudSettingsPage, showSleepSettingsPage
+            };
+            for (int i = 0; i < labels.length; i++) {
+                int tabX = x + i * 82;
+                drawTab(context, tabX, y, width, labels[i], selected[i],
+                        inside(mouseX, mouseY, tabX, y, width, 20));
+            }
+            return;
+        }
+
         int width = 102;
         drawTab(context, x, y, width, "СУТОЧНЫЙ ЦИКЛ",
-                !showSeasonsPage && !showHudSettingsPage, inside(mouseX, mouseY, x, y, width, 20));
+                !showSeasonsPage && !showHudSettingsPage && !showSleepSettingsPage,
+                inside(mouseX, mouseY, x, y, width, 20));
         drawTab(context, x + 108, y, width, "СЕЗОНЫ",
                 showSeasonsPage, inside(mouseX, mouseY, x + 108, y, width, 20));
         drawTab(context, x + 216, y, width, "HUD",
                 showHudSettingsPage, inside(mouseX, mouseY, x + 216, y, width, 20));
+    }
+
+    private static boolean hasSleepSettingsTab() {
+        return serverHasSeamlessSleep && SeamlessSleepCompat.isLoaded();
+    }
+
+    public static void updateSleepSettingsFromServer(boolean available, float multiplier, boolean canEdit) {
+        serverHasSeamlessSleep = available;
+        serverSleepDurationMultiplier = SeamlessSleepCompat.clampMultiplier(multiplier);
+        serverCanEditSleepDuration = available && canEdit;
+        if (ACTIVE != null) {
+            if (!ACTIVE.draggingSleepDuration) {
+                ACTIVE.sleepDurationPreview = serverSleepDurationMultiplier;
+            }
+            if (!hasSleepSettingsTab()) {
+                ACTIVE.showSleepSettingsPage = false;
+                ACTIVE.draggingSleepDuration = false;
+            }
+        }
+    }
+
+    public static void resetSleepSettingsState() {
+        serverHasSeamlessSleep = false;
+        serverSleepDurationMultiplier = 1.0f;
+        serverCanEditSleepDuration = false;
+        if (ACTIVE != null) {
+            ACTIVE.showSleepSettingsPage = false;
+            ACTIVE.draggingSleepDuration = false;
+            ACTIVE.sleepDurationPreview = 1.0f;
+        }
     }
 
     private void drawTab(DrawContext context, int x, int y, int width, String label, boolean selected, boolean hovered) {
@@ -232,6 +294,70 @@ public final class DayCycleScreen {
         context.fill(x, y, x + width, y + 20, fill);
         context.fill(x, y, x + width, y + 1, selected ? 0xFFE0E4E8 : 0x889AA1A9);
         context.drawCenteredTextWithShadow(MinecraftClient.getInstance().textRenderer, label, x + width / 2, y + 6, 0xFFF4F5F6);
+    }
+
+    private void drawSleepSettingsContent(DrawContext context, int left, int right, int contentTop,
+                                           int mouseX, int mouseY) {
+        var renderer = MinecraftClient.getInstance().textRenderer;
+        context.drawTextWithShadow(renderer, Text.literal("ДЛИТЕЛЬНОСТЬ ПРОПУСКА НОЧИ"),
+                left, contentTop, 0xFFD0D5DB);
+        drawRightText(context, Text.literal(String.format(java.util.Locale.ROOT, "%.2f×", sleepDurationPreview)),
+                right, contentTop, 0xFFFFFFFF);
+
+        int sliderX = left + 2;
+        int sliderY = contentTop + 43;
+        int sliderWidth = 250;
+        float progress = (sleepDurationPreview - 0.25f) / (8.0f - 0.25f);
+        int knobX = sliderX + Math.round(progress * sliderWidth);
+        context.fill(sliderX, sliderY + 3, sliderX + sliderWidth, sliderY + 7, 0x99515760);
+        context.fill(sliderX, sliderY + 3, knobX, sliderY + 7, 0xCCBCC3CA);
+        boolean hovered = inside(mouseX, mouseY, sliderX - 6, sliderY - 4, sliderWidth + 12, 18);
+        context.fill(knobX - 5, sliderY - 1, knobX + 5, sliderY + 13,
+                hovered || draggingSleepDuration ? 0xFFFFFFFF : 0xFFE4E7EA);
+        context.fill(knobX - 2, sliderY + 2, knobX + 3, sliderY + 10, 0xFF626870);
+
+        context.drawTextWithShadow(renderer, Text.literal("БЫСТРЕЕ 0.25×"),
+                sliderX, sliderY + 17, 0xFF929AA4);
+        drawRightText(context, Text.literal("МЕДЛЕННЕЕ 8×"),
+                sliderX + sliderWidth, sliderY + 17, 0xFF929AA4);
+
+        double minSeconds = Math.max(1, Math.round(40.0 * sleepDurationPreview)) / 20.0;
+        double maxSeconds = Math.max(1, Math.round(180.0 * sleepDurationPreview)) / 20.0;
+        String transition = "Переход: ~" + formatSeconds(minSeconds) + "–" + formatSeconds(maxSeconds) + " с";
+        context.drawTextWithShadow(renderer, Text.literal(transition), left, contentTop + 83, 0xFFFFFFFF);
+
+        String status = !serverCanEditSleepDuration
+                ? "Для изменения нужны права OP 3"
+                : "Настройка сервера";
+        context.drawTextWithShadow(renderer, Text.literal(status), left, contentTop + 101,
+                serverCanEditSleepDuration ? 0xFF9FD0A7 : 0xFFFFC27A);
+
+        int backX = panelX + (PANEL_WIDTH - 112) / 2;
+        int backY = panelY + getPanelHeight() - 34;
+        boolean backHover = inside(mouseX, mouseY, backX, backY, 112, 24);
+        context.fill(backX, backY, backX + 112, backY + 24, backHover ? 0xCC5B626A : 0x88464A51);
+        context.drawCenteredTextWithShadow(renderer, "← НАЗАД", backX + 56, backY + 8, 0xFFFFFFFF);
+    }
+
+    private static String formatSeconds(double seconds) {
+        if (seconds >= 10.0) return String.format(java.util.Locale.ROOT, "%.0f", seconds);
+        return String.format(java.util.Locale.ROOT, "%.1f", seconds);
+    }
+
+    private void updateSleepDurationFromMouse(int mouseX) {
+        int sliderX = panelX + 20;
+        int sliderWidth = 250;
+        float normalized = (float) Math.max(0.0, Math.min(1.0,
+                (mouseX - sliderX) / (double) sliderWidth));
+        sleepDurationPreview = Math.round((0.25f + normalized * 7.75f) * 100.0f) / 100.0f;
+        sleepDurationPreview = SeamlessSleepCompat.clampMultiplier(sleepDurationPreview);
+    }
+
+    private void commitSleepDuration() {
+        sleepDurationPreview = SeamlessSleepCompat.clampMultiplier(sleepDurationPreview);
+        if (MinecraftClient.getInstance().getNetworkHandler() != null && serverCanEditSleepDuration) {
+            ClientPlayNetworking.send(new SetSleepDurationPayload(sleepDurationPreview));
+        }
     }
 
     private void drawSeasonContent(DrawContext context, int left, int right, int contentTop, int mouseX, int mouseY) {
@@ -620,27 +746,46 @@ public final class DayCycleScreen {
             }
 
             int tabY = panelY + HEADER_HEIGHT + 5;
-            if (inside(x, y, panelX + 18, tabY, 102, 20)) {
-                showHudSettingsPage = false;
-                showSeasonsPage = false;
-                clampPanel(MinecraftClient.getInstance().getWindow().getScaledWidth(), MinecraftClient.getInstance().getWindow().getScaledHeight());
-                playUiSound(1.0f);
-                return true;
-            }
-            if (inside(x, y, panelX + 126, tabY, 102, 20)) {
-                showHudSettingsPage = false;
-                showSeasonsPage = true;
-                clampPanel(MinecraftClient.getInstance().getWindow().getScaledWidth(), MinecraftClient.getInstance().getWindow().getScaledHeight());
-                playUiSound(1.0f);
-                return true;
-            }
-            if (inside(x, y, panelX + 234, tabY, 102, 20)) {
-                previousPageWasSeasons = showSeasonsPage;
-                showHudSettingsPage = true;
-                showSeasonsPage = false;
-                clampPanel(MinecraftClient.getInstance().getWindow().getScaledWidth(), MinecraftClient.getInstance().getWindow().getScaledHeight());
-                playUiSound(1.0f);
-                return true;
+            if (hasSleepSettingsTab()) {
+                for (int i = 0; i < 4; i++) {
+                    int tabX = panelX + 18 + i * 82;
+                    if (!inside(x, y, tabX, tabY, 78, 20)) continue;
+                    showSeasonsPage = i == 1;
+                    showHudSettingsPage = i == 2;
+                    showSleepSettingsPage = i == 3;
+                    if (i == 2) previousPageWasSeasons = false;
+                    draggingSleepDuration = false;
+                    clampPanel(MinecraftClient.getInstance().getWindow().getScaledWidth(),
+                            MinecraftClient.getInstance().getWindow().getScaledHeight());
+                    playUiSound(1.0f);
+                    return true;
+                }
+            } else {
+                if (inside(x, y, panelX + 18, tabY, 102, 20)) {
+                    showHudSettingsPage = false;
+                    showSeasonsPage = false;
+                    showSleepSettingsPage = false;
+                    clampPanel(MinecraftClient.getInstance().getWindow().getScaledWidth(), MinecraftClient.getInstance().getWindow().getScaledHeight());
+                    playUiSound(1.0f);
+                    return true;
+                }
+                if (inside(x, y, panelX + 126, tabY, 102, 20)) {
+                    showHudSettingsPage = false;
+                    showSeasonsPage = true;
+                    showSleepSettingsPage = false;
+                    clampPanel(MinecraftClient.getInstance().getWindow().getScaledWidth(), MinecraftClient.getInstance().getWindow().getScaledHeight());
+                    playUiSound(1.0f);
+                    return true;
+                }
+                if (inside(x, y, panelX + 234, tabY, 102, 20)) {
+                    previousPageWasSeasons = showSeasonsPage;
+                    showHudSettingsPage = true;
+                    showSeasonsPage = false;
+                    showSleepSettingsPage = false;
+                    clampPanel(MinecraftClient.getInstance().getWindow().getScaledWidth(), MinecraftClient.getInstance().getWindow().getScaledHeight());
+                    playUiSound(1.0f);
+                    return true;
+                }
             }
 
             if (inside(x, y, panelX, panelY, PANEL_WIDTH - 64, HEADER_HEIGHT)) {
@@ -691,6 +836,31 @@ public final class DayCycleScreen {
                     return true;
                 }
 
+                if (inside(x, y, panelX, panelY, PANEL_WIDTH, getPanelHeight())) return true;
+                return false;
+            }
+
+            if (showSleepSettingsPage) {
+                int contentTop = panelY + HEADER_HEIGHT + 30;
+                int backX = panelX + (PANEL_WIDTH - 112) / 2;
+                int backY = panelY + getPanelHeight() - 34;
+                if (inside(x, y, backX, backY, 112, 24)) {
+                    showSleepSettingsPage = false;
+                    draggingSleepDuration = false;
+                    clampPanel(MinecraftClient.getInstance().getWindow().getScaledWidth(),
+                            MinecraftClient.getInstance().getWindow().getScaledHeight());
+                    playUiSound(1.0f);
+                    return true;
+                }
+
+                int sliderX = panelX + 20;
+                int sliderY = contentTop + 43;
+                if (serverCanEditSleepDuration
+                        && inside(x, y, sliderX - 6, sliderY - 4, 262, 18)) {
+                    draggingSleepDuration = true;
+                    updateSleepDurationFromMouse(x);
+                    return true;
+                }
                 if (inside(x, y, panelX, panelY, PANEL_WIDTH, getPanelHeight())) return true;
                 return false;
             }
@@ -778,6 +948,7 @@ public final class DayCycleScreen {
             boolean wasResizingPanel = resizingPanel;
             boolean wasDraggingSlider = draggingSlider;
             boolean wasDraggingHudScale = draggingHudScale;
+            boolean wasDraggingSleepDuration = draggingSleepDuration;
             if (wasResizingPanel) {
                 VertexUiConfig.commitScale();
             }
@@ -789,11 +960,17 @@ public final class DayCycleScreen {
                 VertexHudConfig.setScale(VertexHudConfig.getScale());
                 playUiSound(1.04f);
             }
+            if (wasDraggingSleepDuration) {
+                commitSleepDuration();
+                playUiSound(1.04f);
+            }
             draggingPanel = false;
             resizingPanel = false;
             draggingSlider = false;
             draggingHudScale = false;
-            return wasDraggingPanel || wasResizingPanel || wasDraggingSlider || wasDraggingHudScale;
+            draggingSleepDuration = false;
+            return wasDraggingPanel || wasResizingPanel || wasDraggingSlider
+                    || wasDraggingHudScale || wasDraggingSleepDuration;
         }
 
         return false;
@@ -848,6 +1025,10 @@ public final class DayCycleScreen {
             updateHudScaleFromMouse(toLogicalX(mouseX));
             return true;
         }
+        if (draggingSleepDuration) {
+            updateSleepDurationFromMouse(toLogicalX(mouseX));
+            return true;
+        }
 
         return false;
     }
@@ -861,6 +1042,18 @@ public final class DayCycleScreen {
             int sliderY = panelY + HEADER_HEIGHT + 30 + 142;
             if (!inside(x, y, sliderX - 6, sliderY - 4, 262, 18)) return false;
             VertexHudConfig.setScale(VertexHudConfig.getScale() + (verticalAmount > 0.0 ? 0.05f : -0.05f));
+            playUiSound(1.02f);
+            return true;
+        }
+        if (showSleepSettingsPage) {
+            int sliderX = panelX + 20;
+            int sliderY = panelY + HEADER_HEIGHT + 30 + 43;
+            if (!inside(x, y, sliderX - 6, sliderY - 4, 262, 18)) return false;
+            if (!serverCanEditSleepDuration) return true;
+            sleepDurationPreview = SeamlessSleepCompat.clampMultiplier(
+                    sleepDurationPreview + (verticalAmount > 0.0 ? 0.10f : -0.10f));
+            sleepDurationPreview = Math.round(sleepDurationPreview * 100.0f) / 100.0f;
+            commitSleepDuration();
             playUiSound(1.02f);
             return true;
         }
@@ -999,7 +1192,8 @@ public final class DayCycleScreen {
     }
 
     private int getPanelHeight() {
-        return (showSeasonsPage || showHudSettingsPage) ? SEASON_PANEL_HEIGHT : DAY_PANEL_HEIGHT;
+        return (showSeasonsPage || showHudSettingsPage || showSleepSettingsPage)
+                ? SEASON_PANEL_HEIGHT : DAY_PANEL_HEIGHT;
     }
 
     private void clampPanel(int width, int height) {
@@ -1047,6 +1241,7 @@ public final class DayCycleScreen {
         resizingPanel = false;
         draggingSlider = false;
         draggingHudScale = false;
+        draggingSleepDuration = false;
         draggingMini = false;
         miniPressCandidate = false;
         // Cursor mode is controlled exclusively by Minecraft AI Agent.
