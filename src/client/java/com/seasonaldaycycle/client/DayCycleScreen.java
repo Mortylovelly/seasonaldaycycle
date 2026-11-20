@@ -511,9 +511,9 @@ public final class DayCycleScreen {
         float previewScale = VertexHudConfig.getScale();
         context.getMatrices().translate(left + 2.0f, previewY + 3.0f, 0.0f);
         context.getMatrices().scale(previewScale, previewScale, 1.0f);
-        context.drawTextWithShadow(renderer, Text.literal("ГОД 1  •  ДЕНЬ 130/365  •  ЗИМА / СЕРЕДИНА 5/24"),
+        context.drawTextWithShadow(renderer, Text.literal("ПРОЖИТО 129 ДН. • ГОД 130/288 • МЕСЯЦ 7/12"),
                 0, 0, 0xFFFFFFFF);
-        context.drawTextWithShadow(renderer, Text.literal("ВРЕМЯ 13:42  •  ДЕНЬ 25м  •  НОЧЬ 35м"),
+        context.drawTextWithShadow(renderer, Text.literal("ЛЕТО (СЕРЕДИНА) • ДО СМЕНЫ 5/24 • 13:42"),
                 0, renderer.fontHeight + 1, 0xFFE0E6ED);
         context.getMatrices().pop();
 
