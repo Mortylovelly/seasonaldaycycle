@@ -511,9 +511,9 @@ public final class DayCycleScreen {
         float previewScale = VertexHudConfig.getScale();
         context.getMatrices().translate(left + 2.0f, previewY + 3.0f, 0.0f);
         context.getMatrices().scale(previewScale, previewScale, 1.0f);
-        context.drawTextWithShadow(renderer, Text.literal("ДЕНЬ 125  •  ЦИКЛ #126  •  ЗИМА"),
+        context.drawTextWithShadow(renderer, Text.literal("ГОД 1  •  ДЕНЬ 130/365  •  ЗИМА / СЕРЕДИНА 5/24"),
                 0, 0, 0xFFFFFFFF);
-        context.drawTextWithShadow(renderer, Text.literal("ДО СМЕНЫ 17 ДН.  •  13:42  •  ДЕНЬ 25 МИН"),
+        context.drawTextWithShadow(renderer, Text.literal("ВРЕМЯ 13:42  •  ДЕНЬ 25м  •  НОЧЬ 35м"),
                 0, renderer.fontHeight + 1, 0xFFE0E6ED);
         context.getMatrices().pop();
 
@@ -750,10 +750,10 @@ public final class DayCycleScreen {
                 for (int i = 0; i < 4; i++) {
                     int tabX = panelX + 18 + i * 82;
                     if (!inside(x, y, tabX, tabY, 78, 20)) continue;
+                    if (i == 2) previousPageWasSeasons = showSeasonsPage;
                     showSeasonsPage = i == 1;
                     showHudSettingsPage = i == 2;
                     showSleepSettingsPage = i == 3;
-                    if (i == 2) previousPageWasSeasons = false;
                     draggingSleepDuration = false;
                     clampPanel(MinecraftClient.getInstance().getWindow().getScaledWidth(),
                             MinecraftClient.getInstance().getWindow().getScaledHeight());
