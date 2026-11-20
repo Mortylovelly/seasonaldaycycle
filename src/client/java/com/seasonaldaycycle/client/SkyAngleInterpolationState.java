@@ -9,9 +9,8 @@ import java.util.Map;
 import java.util.WeakHashMap;
 
 /**
- * Continuous client sky clock driven by the exact configured length of each
- * phase. Integer time packets are used only for slow phase correction, never
- * for estimating instantaneous speed (which would oscillate at long cycles).
+ * Continuous client sky clock. The displayed sky follows the server's configured
+ * day/night proportions, but speed changes are ramped independently from time.
  */
 public final class SkyAngleInterpolationState {
     private static final double DAY_LENGTH = 24000.0;
@@ -20,6 +19,8 @@ public final class SkyAngleInterpolationState {
     private static final double LARGE_PACKET_ERROR = 200.0;
     private static final int SEASON_REFRESH_TICKS = 20;
     private static final int CORRECTION_TICKS = 80;
+    private static final int SPEED_TRANSITION_TICKS = 40;
+    private static final long MAX_CATCH_UP_TICKS = 2400L;
     private static final Map<LunarWorldView, State> STATES = new WeakHashMap<>();
 
     private SkyAngleInterpolationState() {}
@@ -35,8 +36,9 @@ public final class SkyAngleInterpolationState {
     public static synchronized void acceptServerTime(LunarWorldView lunarWorld, long serverTime, long clientTick) {
         if (!(lunarWorld instanceof World world) || !world.isClient()) return;
         State state = get(lunarWorld);
+
         if (SeamlessSleepClientCompat.isSleepAnimationActive()) {
-            initialize(state, world.getTimeOfDay(), clientTick, world);
+            synchronizeDuringSleep(state, world, world.getTimeOfDay(), clientTick);
             return;
         }
         if (!state.initialized) {
@@ -48,11 +50,11 @@ public final class SkyAngleInterpolationState {
         advanceWholeTicks(state, clientTick);
         double error = shortestPhaseDifference(serverTime, state.visualTime);
 
-        // Integer rounding at the network boundary can be almost one game tick.
+        // Normal packet rounding is ignored; small drift is corrected without reversing time.
         if (Math.abs(error) <= SMALL_PACKET_ERROR) return;
 
         if (Math.abs(error) >= LARGE_PACKET_ERROR) {
-            // A real /time set or other explicit discontinuity, not normal packet jitter.
+            // Explicit /time changes are real discontinuities, unlike speed-slider changes.
             state.visualTime += error;
             state.correctionRemaining = 0.0;
         } else {
@@ -65,22 +67,48 @@ public final class SkyAngleInterpolationState {
         if (!(lunarWorld instanceof World world) || !world.isClient()) {
             return lunarWorld.getLunarTime();
         }
+
         if (SeamlessSleepClientCompat.isSleepAnimationActive()) {
             double sleepTime = lunarWorld.getLunarTime();
-            initialize(state, (long) sleepTime, clientTick, world);
+            synchronizeDuringSleep(state, world, sleepTime, clientTick);
             return sleepTime;
         }
-        if (!state.initialized) initialize(state, world.getLunarTime(), clientTick, world);
 
+        if (!state.initialized) initialize(state, world.getLunarTime(), clientTick, world);
         refreshSeason(state, world, clientTick);
         advanceWholeTicks(state, clientTick);
+
         double partial = Math.max(0.0, Math.min(1.0, tickDelta));
-        return advance(state.visualTime, partial, state.subSeason, SeasonalDayCycleClient.getKnownCycleLengthTicks());
+        return state.visualTime + state.currentSpeed * partial;
     }
 
     private static void initialize(State state, long time, long clientTick, World world) {
         state.initialized = true;
         state.visualTime = time;
+        state.lastClientTick = clientTick;
+        state.lastSeasonRefresh = clientTick;
+        state.subSeason = readSubSeason(world);
+        state.correctionRemaining = 0.0;
+
+        double initialSpeed = getPhaseSpeed(time, state.subSeason,
+                SeasonalDayCycleClient.getKnownCycleLengthTicks());
+        state.speedInitialized = true;
+        state.currentSpeed = initialSpeed;
+        state.transitionStartSpeed = initialSpeed;
+        state.targetSpeed = initialSpeed;
+        state.speedTransitionElapsed = SPEED_TRANSITION_TICKS;
+    }
+
+    private static void synchronizeDuringSleep(State state, World world, double sleepTime, long clientTick) {
+        if (!state.initialized) {
+            initialize(state, (long) Math.floor(sleepTime), clientTick, world);
+            state.visualTime = sleepTime;
+            return;
+        }
+
+        // Seamless Sleep owns the world clock during its own eased transition.
+        // Keep the exact fractional position and resume from there when it finishes.
+        state.visualTime = sleepTime;
         state.lastClientTick = clientTick;
         state.lastSeasonRefresh = clientTick;
         state.subSeason = readSubSeason(world);
@@ -104,46 +132,73 @@ public final class SkyAngleInterpolationState {
         if (elapsed <= 0L) return;
 
         long cycleTicks = SeasonalDayCycleClient.getKnownCycleLengthTicks();
-        state.visualTime = advance(state.visualTime, elapsed, state.subSeason, cycleTicks);
+        long ticksToSimulate = Math.min(elapsed, MAX_CATCH_UP_TICKS);
+        for (long i = 0L; i < ticksToSimulate; i++) {
+            advanceOneTick(state, cycleTicks);
+        }
+
+        // A long frame stall must not freeze or rewind the visual clock.
+        if (elapsed > ticksToSimulate) {
+            state.visualTime += (elapsed - ticksToSimulate) * state.currentSpeed;
+        }
+        state.lastClientTick = clientTick;
+    }
+
+    private static void advanceOneTick(State state, long cycleTicks) {
+        double target = getPhaseSpeed(state.visualTime, state.subSeason, cycleTicks);
+        updateSpeed(state, target);
+        state.visualTime += state.currentSpeed;
 
         if (state.correctionRemaining != 0.0) {
-            double phaseSpeed = getPhaseSpeed(state.visualTime, state.subSeason, cycleTicks);
-            // Keep the sky moving forward; phase corrections must not create a visible reversal.
-            double maxStep = Math.max(0.000001, phaseSpeed * 0.15);
+            // Corrections can alter speed slightly, but can never stop or reverse the clock.
+            double maxStep = Math.max(1.0E-9, state.currentSpeed * 0.10);
             double step = Math.max(-maxStep,
                     Math.min(maxStep, state.correctionRemaining / CORRECTION_TICKS));
             state.visualTime += step;
             state.correctionRemaining -= step;
             if (Math.abs(state.correctionRemaining) < 0.01) state.correctionRemaining = 0.0;
         }
-        state.lastClientTick = clientTick;
     }
 
-    private static double advance(double startTime, double clientTicks, String subSeason, long cycleTicks) {
-        if (clientTicks <= 0.0) return startTime;
-        double time = startTime;
-        double remaining = clientTicks;
-
-        // At normal settings only one or two boundaries are crossed per tick.
-        // The guard protects against pathological configs with extremely short phases.
-        for (int i = 0; remaining > 1.0E-9 && i < 8192; i++) {
-            double phase = positiveModulo(time, DAY_LENGTH);
-            boolean day = phase < HALF_DAY;
-            double speed = getPhaseSpeed(time, subSeason, cycleTicks);
-            double untilBoundary = day ? (HALF_DAY - phase) / speed : (DAY_LENGTH - phase) / speed;
-
-            if (!Double.isFinite(untilBoundary) || untilBoundary <= 1.0E-9) {
-                time += remaining * averageSpeed(subSeason, cycleTicks);
-                return time;
-            }
-
-            double step = Math.min(remaining, untilBoundary);
-            time += step * speed;
-            remaining -= step;
+    private static void updateSpeed(State state, double targetSpeed) {
+        if (!Double.isFinite(targetSpeed) || targetSpeed <= 0.0) {
+            targetSpeed = 1.0 / 24000.0;
         }
 
-        if (remaining > 1.0E-9) time += remaining * averageSpeed(subSeason, cycleTicks);
-        return time;
+        if (!state.speedInitialized) {
+            state.speedInitialized = true;
+            state.currentSpeed = targetSpeed;
+            state.transitionStartSpeed = targetSpeed;
+            state.targetSpeed = targetSpeed;
+            state.speedTransitionElapsed = SPEED_TRANSITION_TICKS;
+            return;
+        }
+
+        double difference = Math.abs(targetSpeed - state.targetSpeed);
+        double threshold = Math.max(1.0E-9, Math.abs(targetSpeed) * 1.0E-5);
+        if (difference > threshold) {
+            // If the slider moves again mid-ramp, continue from the current velocity.
+            state.transitionStartSpeed = state.currentSpeed;
+            state.targetSpeed = targetSpeed;
+            state.speedTransitionElapsed = 0;
+        }
+
+        if (state.speedTransitionElapsed < SPEED_TRANSITION_TICKS) {
+            state.speedTransitionElapsed++;
+            double progress = state.speedTransitionElapsed / (double) SPEED_TRANSITION_TICKS;
+            double eased = smootherStep(progress);
+            state.currentSpeed = state.transitionStartSpeed
+                    + (state.targetSpeed - state.transitionStartSpeed) * eased;
+        } else {
+            state.currentSpeed = state.targetSpeed;
+        }
+
+        state.currentSpeed = Math.max(1.0E-9, state.currentSpeed);
+    }
+
+    private static double smootherStep(double value) {
+        double x = Math.max(0.0, Math.min(1.0, value));
+        return x * x * x * (x * (x * 6.0 - 15.0) + 10.0);
     }
 
     private static double getPhaseSpeed(double time, String subSeason, long cycleTicks) {
@@ -153,7 +208,8 @@ public final class SkyAngleInterpolationState {
                 ? ModConfig.getDayTicksForSubSeason(subSeason, safeCycle)
                 : ModConfig.getNightTicksForSubSeason(subSeason, safeCycle);
         if (!Double.isFinite(phaseTicks) || phaseTicks < 1.0) {
-            return averageSpeed(subSeason, safeCycle);
+            double average = averageSpeed(subSeason, safeCycle);
+            return Double.isFinite(average) && average > 0.0 ? average : 1.0 / safeCycle;
         }
         return HALF_DAY / phaseTicks;
     }
@@ -191,5 +247,11 @@ public final class SkyAngleInterpolationState {
         private long lastSeasonRefresh;
         private String subSeason;
         private double correctionRemaining;
+
+        private boolean speedInitialized;
+        private double currentSpeed;
+        private double transitionStartSpeed;
+        private double targetSpeed;
+        private int speedTransitionElapsed;
     }
 }
