@@ -102,6 +102,7 @@ public final class SkyAngleInterpolationState {
     }
 
     private static void synchronizeDuringSleep(State state, World world, double sleepTime, long clientTick) {
+        state.sleepAnimationWasActive = true;
         if (!state.initialized) {
             initialize(state, (long) Math.floor(sleepTime), clientTick, world);
             state.visualTime = sleepTime;
@@ -110,7 +111,6 @@ public final class SkyAngleInterpolationState {
 
         // Seamless Sleep owns the world clock during its own eased transition.
         // Keep the exact fractional position and resume from there when it finishes.
-        state.sleepAnimationWasActive = true;
         state.visualTime = sleepTime;
         state.lastClientTick = clientTick;
         state.lastSeasonRefresh = clientTick;
