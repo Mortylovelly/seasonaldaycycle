@@ -1,6 +1,5 @@
 package com.seasonaldaycycle.client;
 
-import com.seasonaldaycycle.ModConfig;
 import com.seasonaldaycycle.SereneSeasonsCompat;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.font.TextRenderer;
@@ -10,7 +9,7 @@ import net.minecraft.world.World;
 
 import java.util.Locale;
 
-/** Compact, resolution-aware day and season status panel. */
+/** Compact, resolution-aware world calendar and time display. */
 public final class VertexHudOverlay {
     private static final String[] SEASONS = {"ВЕСНА", "ЛЕТО", "ОСЕНЬ", "ЗИМА"};
     private static final String[] SUB_SEASONS = {
@@ -19,6 +18,10 @@ public final class VertexHudOverlay {
             "РАННЯЯ", "СЕРЕДИНА", "ПОЗДНЯЯ",
             "РАННЯЯ", "СЕРЕДИНА", "ПОЗДНЯЯ"
     };
+    private static final int[] VANILLA_MONTH_LENGTHS = {
+            31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31
+    };
+
     private static long nextRefreshTick;
     private static SereneSeasonsCompat.SeasonInfo cachedSeason = SereneSeasonsCompat.SeasonInfo.unavailable();
     private static World cachedWorld;
@@ -43,44 +46,49 @@ public final class VertexHudOverlay {
             nextRefreshTick = clientTick + 20L;
         }
 
-        // Use the same continuous, cycle-aware clock as the sun and moon.
+        // One continuous clock drives the sun, moon and displayed time.
         double visualTime = SkyAngleInterpolationState.getVisualTime(client.world, clientTick, tickDelta);
         long absoluteTime = (long) Math.floor(visualTime);
-        long timeOfDay = Math.floorMod(absoluteTime, 24000L);
         long elapsedDays = Math.max(0L, Math.floorDiv(absoluteTime, 24000L));
-        long daysPerYear = 365L;
-        long year = Math.floorDiv(elapsedDays, daysPerYear) + 1L;
-        long dayOfYear = Math.floorMod(elapsedDays, daysPerYear) + 1L;
+        long timeOfDay = Math.floorMod(absoluteTime, 24000L);
 
-        long cycleTicks = SeasonalDayCycleClient.getKnownCycleLengthTicks();
-        if (cycleTicks <= 0L) cycleTicks = ModConfig.DEFAULT_CYCLE_LENGTH_TICKS;
-
+        long daysInYear = 365L;
+        long dayOfYear;
+        int monthNumber;
         String seasonText = "СЕЗОН —";
+        String phaseProgress = "ДО СМЕНЫ —";
+
         if (cachedSeason.available()) {
             int ordinal = Math.max(0, Math.min(11, cachedSeason.subSeasonOrdinal()));
             int seasonIndex = ordinal / 3;
-            int daysPerSeason = Math.max(1, cachedSeason.daysPerSeason());
-            int dayInSeason = Math.floorMod(cachedSeason.seasonCycleDay(), daysPerSeason) + 1;
-            seasonText = SEASONS[seasonIndex] + " / " + SUB_SEASONS[ordinal]
-                    + " " + dayInSeason + "/" + daysPerSeason;
+            int safeDaysPerSeason = Math.max(1, cachedSeason.daysPerSeason());
+            int safeDaysPerSubSeason = Math.max(1, cachedSeason.daysPerSubSeason());
+
+            // Serene Seasons runs twelve equal calendar periods per year.
+            // This automatically follows its configured season and sub-season lengths.
+            daysInYear = (long) safeDaysPerSeason * 4L;
+            long calendarDay = Math.max(0L, cachedSeason.seasonCycleDay());
+            dayOfYear = Math.floorMod(calendarDay, daysInYear) + 1L;
+            monthNumber = ordinal + 1;
+
+            int dayInCurrentMonth = (int) (Math.floorMod(calendarDay, safeDaysPerSubSeason) + 1L);
+            seasonText = SEASONS[seasonIndex] + " (" + SUB_SEASONS[ordinal] + ")";
+            phaseProgress = "ДО СМЕНЫ " + dayInCurrentMonth + "/" + safeDaysPerSubSeason;
+        } else {
+            // Keep a useful calendar if Serene Seasons is not installed.
+            dayOfYear = Math.floorMod(elapsedDays, daysInYear) + 1L;
+            monthNumber = getVanillaMonthNumber((int) dayOfYear);
         }
 
-        String subSeason = cachedSeason.available() ? cachedSeason.subSeasonName() : null;
-        long dayTicks = Math.round(ModConfig.getDayTicksForSubSeason(subSeason, cycleTicks));
-        long nightTicks = Math.round(ModConfig.getNightTicksForSubSeason(subSeason, cycleTicks));
-
-        String firstLine = "ГОД " + year + " • ДЕНЬ " + dayOfYear + "/" + daysPerYear
-                + " • " + seasonText;
-        String secondLine = "ВРЕМЯ " + formatMinecraftTime(timeOfDay)
-                + " • ДЕНЬ " + formatDuration(dayTicks)
-                + " • НОЧЬ " + formatDuration(nightTicks);
+        String firstLine = "ПРОЖИТО " + elapsedDays + " ДН. • ГОД "
+                + dayOfYear + "/" + daysInYear + " • МЕСЯЦ " + monthNumber + "/12";
+        String secondLine = seasonText + " • " + phaseProgress
+                + " • " + formatMinecraftTime(timeOfDay);
 
         TextRenderer renderer = client.textRenderer;
         float scale = VertexHudConfig.getScale();
         int lineGap = 1;
-        int firstWidth = renderer.getWidth(firstLine);
-        int secondWidth = renderer.getWidth(secondLine);
-        int logicalWidth = Math.max(firstWidth, secondWidth);
+        int logicalWidth = Math.max(renderer.getWidth(firstLine), renderer.getWidth(secondLine));
         int logicalHeight = renderer.fontHeight * 2 + lineGap;
 
         float availableWidth = Math.max(1.0f, screenWidth - 4.0f);
@@ -112,20 +120,19 @@ public final class VertexHudOverlay {
         context.getMatrices().pop();
     }
 
+    private static int getVanillaMonthNumber(int dayOfYear) {
+        int remainingDays = Math.max(1, dayOfYear);
+        for (int month = 0; month < VANILLA_MONTH_LENGTHS.length; month++) {
+            if (remainingDays <= VANILLA_MONTH_LENGTHS[month]) return month + 1;
+            remainingDays -= VANILLA_MONTH_LENGTHS[month];
+        }
+        return 12;
+    }
+
     private static String formatMinecraftTime(long ticks) {
         long shifted = Math.floorMod(ticks + 6000L, 24000L);
         long hours = shifted / 1000L;
         long minutes = (shifted % 1000L) * 60L / 1000L;
         return String.format(Locale.ROOT, "%02d:%02d", hours, minutes);
-    }
-
-    private static String formatDuration(long ticks) {
-        long seconds = Math.max(0L, ticks / 20L);
-        long hours = seconds / 3600L;
-        long minutes = (seconds % 3600L) / 60L;
-        long remainder = seconds % 60L;
-        if (hours > 0L) return hours + "ч" + (minutes > 0L ? minutes + "м" : "");
-        if (minutes > 0L) return minutes + "м" + (remainder > 0L ? remainder + "с" : "");
-        return remainder + "с";
     }
 }
