@@ -63,6 +63,10 @@ public final class SeasonalDayCycleClient implements ClientModInitializer {
             } else {
                 VertexHudOverlay.render(drawContext, width, height, tickDelta);
             }
+
+            // This overlay is independent of the normal calendar HUD and appears
+            // only after Seamless Sleep has actually started its transition.
+            SleepClockHudOverlay.render(drawContext, width, height, tickDelta);
         });
     }
 
