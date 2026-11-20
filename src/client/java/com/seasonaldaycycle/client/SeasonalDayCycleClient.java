@@ -18,11 +18,13 @@ public final class SeasonalDayCycleClient implements ClientModInitializer {
     public void onInitializeClient() {
         VertexHudConfig.load();
         VertexUiConfig.load();
+        VertexKeyBindings.register();
 
         // Register the compatibility bridge on the first tick, after all client
         // initializers have run. This removes dependence on mod initializer order.
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             AiAgentCursorCompat.tick(client);
+            VertexKeyBindings.tick(client);
             VertexPanelController.tick(client);
         });
 
