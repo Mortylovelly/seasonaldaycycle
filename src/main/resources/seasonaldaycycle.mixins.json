@@ -9,7 +9,8 @@
     "LunarWorldViewMixin",
     "ClientPlayNetworkHandlerMixin",
     "DayCycleScreenRenderMixin",
-    "DayCycleScreenMiniAccessor"
+    "DayCycleScreenMiniAccessor",
+    "SeamlessSleepClientReleaseMixin"
   ],
   "injectors": {
     "defaultRequire": 1
