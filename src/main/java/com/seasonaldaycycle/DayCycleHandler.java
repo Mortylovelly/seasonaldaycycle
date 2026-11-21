@@ -133,6 +133,7 @@ public final class DayCycleHandler {
         State state = getState(level);
         state.timeDecimalAccumulator = 0.0D;
         state.lastKnownTime = level.getTimeOfDay();
+        DayCycleNetworking.syncDayOffset(level, state.dayOffsetDays);
     }
 
     /** Authoritative elapsed-day counter, including the saved offset after /time set. */
@@ -150,14 +151,17 @@ public final class DayCycleHandler {
         long newOffset = DayCycleWorldConfig.sanitizeElapsedDayOffsetDays(
                 previousElapsedDays - currentRawDays);
 
-        if (newOffset == state.dayOffsetDays) return;
+        if (newOffset != state.dayOffsetDays) {
+            state.dayOffsetDays = newOffset;
+            DayCycleWorldConfig.setElapsedDayOffsetDays(level, newOffset);
+            SeasonalDayCycle.LOGGER.info(
+                    "[Vertex] Preserved elapsed calendar day {} after a world-time change.",
+                    Math.max(0L, previousElapsedDays));
+        }
 
-        state.dayOffsetDays = newOffset;
-        DayCycleWorldConfig.setElapsedDayOffsetDays(level, newOffset);
-        DayCycleNetworking.syncDayOffset(level, newOffset);
-        SeasonalDayCycle.LOGGER.info(
-                "[Vertex] Preserved elapsed calendar day {} after a world-time change.",
-                Math.max(0L, previousElapsedDays));
+        // Re-anchor clients even when the offset itself did not change. A /time set
+        // within the same raw day can still jump across midnight on the client.
+        DayCycleNetworking.syncDayOffset(level, state.dayOffsetDays);
     }
 
     public static void clearAll() {
