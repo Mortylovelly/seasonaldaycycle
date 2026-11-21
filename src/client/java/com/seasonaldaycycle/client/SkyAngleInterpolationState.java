@@ -47,7 +47,8 @@ public final class SkyAngleInterpolationState {
                 Math.min(1_000_000_000_000L, offsetDays));
         serverDayOffsetTicks = safeDays * DAY_LENGTH;
 
-        if (!(lunarWorld instanceof World world) || !world.isClient()) return;
+        if (!(lunarWorld instanceof World world) || !world.isClient()
+                || world.getRegistryKey() != World.OVERWORLD) return;
 
         State state = get(lunarWorld);
         state.initialized = true;
@@ -77,10 +78,11 @@ public final class SkyAngleInterpolationState {
         if (!(lunarWorld instanceof World world) || !world.isClient()) return;
         State state = get(lunarWorld);
 
-        double adjustedServerTime = (double) serverTime + serverDayOffsetTicks;
+        double calendarOffset = getCalendarOffset(world);
+        double adjustedServerTime = (double) serverTime + calendarOffset;
         if (SeamlessSleepClientCompat.isSleepAnimationActive()) {
             synchronizeDuringSleep(
-                    state, world, world.getTimeOfDay() + serverDayOffsetTicks, clientTick);
+                    state, world, world.getTimeOfDay() + calendarOffset, clientTick);
             return;
         }
         if (!state.initialized) {
@@ -118,14 +120,15 @@ public final class SkyAngleInterpolationState {
             return lunarWorld.getLunarTime();
         }
 
+        double calendarOffset = getCalendarOffset(world);
         if (SeamlessSleepClientCompat.isSleepAnimationActive()) {
-            double sleepTime = lunarWorld.getLunarTime() + serverDayOffsetTicks;
+            double sleepTime = lunarWorld.getLunarTime() + calendarOffset;
             synchronizeDuringSleep(state, world, sleepTime, clientTick);
             return sleepTime;
         }
 
         if (!state.initialized) {
-            initialize(state, (long) Math.floor(world.getLunarTime() + serverDayOffsetTicks),
+            initialize(state, (long) Math.floor(world.getLunarTime() + calendarOffset),
                     clientTick, world);
         }
         refreshSeason(state, world, clientTick);
@@ -182,7 +185,9 @@ public final class SkyAngleInterpolationState {
         if (!(lunarWorld instanceof World world) || !world.isClient()) return;
 
         State state = get(lunarWorld);
-        long adjustedSunrise = (long) Math.floor(sunriseTime + serverDayOffsetTicks);
+        double calendarOffset = world.getRegistryKey() == World.OVERWORLD
+                ? serverDayOffsetTicks : 0.0D;
+        long adjustedSunrise = (long) Math.floor(sunriseTime + calendarOffset);
         if (!state.initialized) {
             initialize(state, adjustedSunrise, clientTick, world);
         }
@@ -218,6 +223,11 @@ public final class SkyAngleInterpolationState {
             state.subSeason = readSubSeason(world);
             state.lastSeasonRefresh = clientTick;
         }
+    }
+
+    private static double getCalendarOffset(World world) {
+        return world != null && world.getRegistryKey() == World.OVERWORLD
+                ? serverDayOffsetTicks : 0.0D;
     }
 
     private static String readSubSeason(World world) {
