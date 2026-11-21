@@ -55,6 +55,7 @@ public final class DayCycleScreen {
     };
 
     private static boolean serverCanEdit;
+    private static boolean serverSynced;
     private static boolean serverHasSeamlessSleep;
     private static float serverSleepDurationMultiplier = 1.0f;
     private static boolean serverCanEditSleepDuration;
@@ -84,7 +85,6 @@ public final class DayCycleScreen {
     private int dragOffsetX;
     private int dragOffsetY;
     private long savedUntil;
-    private boolean serverSynced;
     private int lastSoundStep = Integer.MIN_VALUE;
 
     public DayCycleScreen() {
@@ -241,6 +241,8 @@ public final class DayCycleScreen {
     }
 
     public static void resetSleepSettingsState() {
+        serverSynced = false;
+        serverCanEdit = false;
         serverHasSeamlessSleep = false;
         serverSleepDurationMultiplier = 1.0f;
         serverCanEditSleepDuration = false;
@@ -1019,6 +1021,7 @@ public final class DayCycleScreen {
 
     public static void updateCanEdit(boolean canEdit) {
         serverCanEdit = canEdit;
+        serverSynced = true;
     }
 
     private boolean isSliderHovered(int mouseX, int mouseY) {
