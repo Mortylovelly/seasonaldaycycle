@@ -13,8 +13,6 @@ public final class DayCycleHandler {
     private static final long VANILLA_CYCLE = 24000L;
     private static final long EXTERNAL_CHANGE_THRESHOLD = 200L;
     private static final int SPEED_TRANSITION_TICKS = 40;
-    // Leave the final 12 ticks as a quiet rest after the normal speed is reached.
-    private static final int SLEEP_RELEASE_TRANSITION_TICKS = 28;
 
     private DayCycleHandler() {}
 
@@ -31,43 +29,13 @@ public final class DayCycleHandler {
             state.seasonRefreshTicks = 0;
         }
 
-        // Seamless Sleep owns the clock during the night-skip part. In its final
-        // 40 ticks, Vertex takes over, restores normal speed in 28 ticks, and
-        // leaves the player lying down for the remaining 12 ticks.
+        // Seamless Sleep owns the clock for the complete animation. Its own state
+        // now applies one continuous curve which reaches the configured normal
+        // day speed before the player is released from bed.
         if (SeamlessSleepCompat.isServerSleepAnimationActive(level)) {
             state.sleepAnimationWasActive = true;
-            if (!SeamlessSleepCompat.isServerSleepReleasePhase(level)) {
-                state.sleepReleaseStarted = false;
-                state.timeDecimalAccumulator = 0.0;
-                state.lastKnownTime = currentTime;
-                return;
-            }
-
-            double targetSpeed = getTargetSpeed(currentTime, state.cachedSubSeason,
-                    DayCycleWorldConfig.getCycleLengthTicks(level));
-            if (!state.sleepReleaseStarted) {
-                state.sleepReleaseStarted = true;
-                state.currentSpeed = Math.max(1.0E-9, Math.min(state.currentSpeed, targetSpeed) * 0.01);
-                state.transitionStartSpeed = state.currentSpeed;
-                state.targetSpeed = targetSpeed;
-                state.speedTransitionElapsed = 0;
-                state.speedTransitionDurationTicks = SLEEP_RELEASE_TRANSITION_TICKS;
-                state.speedInitialized = true;
-                state.forceSpeedTransition = false;
-                state.timeDecimalAccumulator = 0.0;
-            }
-
-            updateSpeed(state, targetSpeed);
-
-            // Seamless Sleep intentionally suppresses vanilla's daylight tick
-            // until it wakes the player, so do not subtract a vanilla tick here.
-            state.timeDecimalAccumulator += state.currentSpeed;
-            long toAdd = (long) Math.floor(state.timeDecimalAccumulator);
-            state.timeDecimalAccumulator -= toAdd;
-            long newTime = currentTime + toAdd;
-            if (newTime < 0L) newTime = Math.floorMod(newTime, VANILLA_CYCLE);
-            level.setTimeOfDay(newTime);
-            state.lastKnownTime = newTime;
+            state.timeDecimalAccumulator = 0.0;
+            state.lastKnownTime = currentTime;
             return;
         }
 
@@ -76,16 +44,18 @@ public final class DayCycleHandler {
             state.timeDecimalAccumulator = 0.0;
             state.lastKnownTime = currentTime;
 
-            // If the player left early, begin a normal smooth recovery immediately.
-            // A natural wake has already completed this ramp during the settle phase.
-            if (!state.sleepReleaseStarted) {
-                state.currentSpeed = Math.max(1.0E-9, state.currentSpeed * 0.01);
-                state.transitionStartSpeed = state.currentSpeed;
-                state.speedTransitionElapsed = 0;
-                state.speedTransitionDurationTicks = SPEED_TRANSITION_TICKS;
-                state.forceSpeedTransition = true;
-            }
-            state.sleepReleaseStarted = false;
+            // The sleep curve finishes with exactly the configured normal speed.
+            // Synchronize our controller to that velocity instead of restarting
+            // from a near-zero speed and making the sun appear to pause.
+            double resumeSpeed = getTargetSpeed(currentTime, state.cachedSubSeason,
+                    DayCycleWorldConfig.getCycleLengthTicks(level));
+            state.currentSpeed = resumeSpeed;
+            state.transitionStartSpeed = resumeSpeed;
+            state.targetSpeed = resumeSpeed;
+            state.speedTransitionElapsed = SPEED_TRANSITION_TICKS;
+            state.speedTransitionDurationTicks = SPEED_TRANSITION_TICKS;
+            state.speedInitialized = true;
+            state.forceSpeedTransition = false;
         }
 
         double targetSpeed = getTargetSpeed(currentTime, state.cachedSubSeason,
@@ -123,6 +93,18 @@ public final class DayCycleHandler {
         state.lastKnownTime = newTime;
     }
 
+    /** Returns the configured normal world-time speed at an explicit time of day. */
+    public static double getConfiguredSpeed(ServerWorld level, long timeOfDay) {
+        if (level == null || !level.getGameRules().getBoolean(GameRules.DO_DAYLIGHT_CYCLE)) {
+            return 0.0;
+        }
+        State state = STATES.get(level);
+        String subSeason = state != null && state.seasonInitialized
+                ? state.cachedSubSeason
+                : getCurrentSubSeason(level);
+        return getTargetSpeed(timeOfDay, subSeason, DayCycleWorldConfig.getCycleLengthTicks(level));
+    }
+
     private static double getTargetSpeed(long currentTime, String subSeason, long cycleLengthTicks) {
         long timeInDay = Math.floorMod(currentTime, VANILLA_CYCLE);
         boolean isDay = timeInDay < VANILLA_DAY_END;
@@ -142,7 +124,8 @@ public final class DayCycleHandler {
             state.currentSpeed = targetSpeed;
             state.transitionStartSpeed = targetSpeed;
             state.targetSpeed = targetSpeed;
-            state.speedTransitionElapsed = state.speedTransitionDurationTicks;
+            state.speedTransitionElapsed = SPEED_TRANSITION_TICKS;
+            state.speedTransitionDurationTicks = SPEED_TRANSITION_TICKS;
             return;
         }
 
@@ -154,9 +137,7 @@ public final class DayCycleHandler {
             state.transitionStartSpeed = state.currentSpeed;
             state.targetSpeed = targetSpeed;
             state.speedTransitionElapsed = 0;
-            if (!state.sleepReleaseStarted) {
-                state.speedTransitionDurationTicks = SPEED_TRANSITION_TICKS;
-            }
+            state.speedTransitionDurationTicks = SPEED_TRANSITION_TICKS;
             state.forceSpeedTransition = false;
         }
 
@@ -171,7 +152,6 @@ public final class DayCycleHandler {
             state.currentSpeed = state.targetSpeed;
         }
 
-        // Day time must always move forward, including while slowing down.
         state.currentSpeed = Math.max(1.0E-9, state.currentSpeed);
     }
 
@@ -227,7 +207,6 @@ public final class DayCycleHandler {
         int seasonRefreshTicks;
         boolean seasonInitialized;
         boolean sleepAnimationWasActive;
-        boolean sleepReleaseStarted;
 
         boolean speedInitialized;
         double currentSpeed;
