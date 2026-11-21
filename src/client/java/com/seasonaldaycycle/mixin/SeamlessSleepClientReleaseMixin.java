@@ -38,6 +38,17 @@ public abstract class SeamlessSleepClientReleaseMixin {
     @Shadow(remap = false)
     private boolean replayCompatMode;
 
+    @Shadow(remap = false)
+    public abstract void reset();
+
+    @Unique
+    private boolean vertex$releaseTimeApplied;
+
+    @Inject(method = "start", at = @At("TAIL"), remap = false)
+    private void vertex$resetReleaseMarker(CallbackInfo ci) {
+        this.vertex$releaseTimeApplied = false;
+    }
+
     @Inject(method = "tick", at = @At("HEAD"), cancellable = true, remap = false)
     private void vertex$mirrorWakeSettling(CallbackInfo ci) {
         if (!this.active || this.replayCompatMode) return;
@@ -47,7 +58,12 @@ public abstract class SeamlessSleepClientReleaseMixin {
         long elapsedMillis = Math.max(0L, System.currentTimeMillis() - this.startMillis);
         long totalMillis = Math.max(1L, this.durationTicks) * 50L;
         if (elapsedMillis >= totalMillis) {
-            // Let Seamless Sleep run its original completion path and reset the state.
+            // End the visual state without writing sunrise over the now-normal client clock.
+            if (!this.vertex$releaseTimeApplied) {
+                world.setTimeOfDay(this.endTimeOfDay);
+            }
+            this.reset();
+            ci.cancel();
             return;
         }
 
@@ -55,7 +71,10 @@ public abstract class SeamlessSleepClientReleaseMixin {
         long skipMillis = skipTicks * 50L;
         if (elapsedMillis >= skipMillis) {
             // Hold the exact sunrise while Vertex accelerates the normal world clock.
-            world.setTimeOfDay(this.endTimeOfDay);
+            if (!this.vertex$releaseTimeApplied) {
+                world.setTimeOfDay(this.endTimeOfDay);
+                this.vertex$releaseTimeApplied = true;
+            }
             ci.cancel();
             return;
         }
