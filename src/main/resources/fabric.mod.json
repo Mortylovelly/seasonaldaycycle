@@ -13,7 +13,8 @@
     "client": ["com.seasonaldaycycle.client.SeasonalDayCycleClient"]
   },
   "mixins": [
-    "seasonaldaycycle.mixins.json"
+    "seasonaldaycycle.mixins.json",
+    "seasonaldaycycle.client.mixins.json"
   ],
   "depends": {
     "fabricloader": ">=0.17.2",
