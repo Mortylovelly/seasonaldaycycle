@@ -59,15 +59,18 @@ public final class SkyAngleInterpolationState {
         state.sleepAnimationWasActive = false;
         state.sleepNaturalReleasePending = false;
 
-        double speed = getPhaseSpeed(calendarTime, state.subSeason,
-                SeasonalDayCycleClient.getKnownCycleLengthTicks());
-        state.speedInitialized = true;
-        state.currentSpeed = Math.max(1.0E-9D, speed);
-        state.transitionStartSpeed = state.currentSpeed;
-        state.targetSpeed = state.currentSpeed;
-        state.speedTransitionElapsed = SPEED_TRANSITION_TICKS;
-        state.speedTransitionDurationTicks = SPEED_TRANSITION_TICKS;
-        state.sleepResumeTransition = false;
+        if (!state.speedInitialized) {
+            double speed = getPhaseSpeed(calendarTime, state.subSeason,
+                    SeasonalDayCycleClient.getKnownCycleLengthTicks());
+            state.speedInitialized = true;
+            state.currentSpeed = Math.max(1.0E-9D, speed);
+            state.transitionStartSpeed = state.currentSpeed;
+            state.targetSpeed = state.currentSpeed;
+            state.speedTransitionElapsed = SPEED_TRANSITION_TICKS;
+            state.speedTransitionDurationTicks = SPEED_TRANSITION_TICKS;
+        }
+        // If this client was already ticking, keep its current velocity. The next
+        // simulation tick will smoothly ramp toward the new day/night phase speed.
     }
 
     public static synchronized void acceptServerTime(LunarWorldView lunarWorld, long serverTime, long clientTick) {
