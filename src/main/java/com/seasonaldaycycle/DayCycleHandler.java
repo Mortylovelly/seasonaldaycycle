@@ -124,6 +124,17 @@ public final class DayCycleHandler {
         state.lastKnownTime = currentTime;
     }
 
+    /**
+     * /time add explicitly advances or rewinds the world clock. Keep that calendar
+     * movement (including a full added day) instead of treating it as a clock reset.
+     */
+    public static void onTimeAddCommand(ServerWorld level) {
+        if (level == null || level.getRegistryKey() != World.OVERWORLD) return;
+        State state = getState(level);
+        state.timeDecimalAccumulator = 0.0D;
+        state.lastKnownTime = level.getTimeOfDay();
+    }
+
     /** Authoritative elapsed-day counter, including the saved offset after /time set. */
     public static long getElapsedDays(ServerWorld level) {
         if (level == null) return 0L;
