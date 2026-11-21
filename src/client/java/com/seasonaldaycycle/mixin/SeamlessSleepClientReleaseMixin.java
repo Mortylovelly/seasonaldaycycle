@@ -1,7 +1,6 @@
 package com.seasonaldaycycle.mixin;
 
 import com.seasonaldaycycle.client.SkyAngleInterpolationState;
-import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.world.ClientWorld;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
@@ -11,15 +10,12 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/**
- * Mirrors the server's shortened night-skip phase on the client and keeps the
- * sleep state alive during Vertex's final wake-settling window.
- */
+/** Mirrors the server's continuous sleep curve on the client. */
 @Pseudo
 @Mixin(targets = "net.aqualoco.sec.sleep.ClientSleepAnimationState", remap = false)
 public abstract class SeamlessSleepClientReleaseMixin {
     @Unique
-    private static final int VERTEX_WAKE_SETTLE_TICKS = 40;
+    private static final int VERTEX_REST_TICKS = 40;
 
     @Shadow(remap = false)
     private boolean active;
@@ -42,61 +38,62 @@ public abstract class SeamlessSleepClientReleaseMixin {
     @Shadow(remap = false)
     public abstract void reset();
 
-    @Unique
-    private boolean vertex$releaseTimeApplied;
-
-    @Inject(method = "start", at = @At("TAIL"), remap = false)
-    private void vertex$resetReleaseMarker(CallbackInfo ci) {
-        this.vertex$releaseTimeApplied = false;
-    }
-
     @Inject(method = "tick", at = @At("HEAD"), cancellable = true, remap = false)
-    private void vertex$mirrorWakeSettling(CallbackInfo ci) {
+    private void vertex$driveContinuousSleepCurve(
+            ClientWorld world, float partialTick, CallbackInfo ci) {
         if (!this.active || this.replayCompatMode) return;
-        ClientWorld world = MinecraftClient.getInstance().world;
-        if (world == null) return;
+        if (world == null || world.getRegistryKey() != net.minecraft.world.World.OVERWORLD) return;
 
-        long elapsedMillis = Math.max(0L, System.currentTimeMillis() - this.startMillis);
-        long totalMillis = Math.max(1L, this.durationTicks) * 50L;
-        if (elapsedMillis >= totalMillis) {
-            // End the visual state without writing sunrise over the now-normal client clock.
-            if (!this.vertex$releaseTimeApplied) {
-                world.setTimeOfDay(this.endTimeOfDay);
-                SkyAngleInterpolationState.finishSleepTransition(
-                        world, this.endTimeOfDay, world.getTime());
-            }
-            this.reset();
-            ci.cancel();
-            return;
-        }
-
-        long skipTicks = Math.max(1, this.durationTicks - VERTEX_WAKE_SETTLE_TICKS);
+        int totalTicks = Math.max(1, this.durationTicks);
+        int skipTicks = Math.max(1, totalTicks - VERTEX_REST_TICKS);
         long skipMillis = skipTicks * 50L;
-        if (elapsedMillis >= skipMillis) {
-            // Hold the exact sunrise while Vertex accelerates the normal world clock.
-            if (!this.vertex$releaseTimeApplied) {
-                world.setTimeOfDay(this.endTimeOfDay);
-                SkyAngleInterpolationState.finishSleepTransition(
-                        world, this.endTimeOfDay, world.getTime());
-                this.vertex$releaseTimeApplied = true;
-            }
-            ci.cancel();
-            return;
+        long totalMillis = totalTicks * 50L;
+        long elapsedMillis = Math.max(0L, System.currentTimeMillis() - this.startMillis);
+
+        double normalSpeed = SkyAngleInterpolationState.getConfiguredSpeed(world, this.endTimeOfDay);
+        long skippedTime = Math.max(1L, this.endTimeOfDay - this.startTimeOfDay);
+        double endSlope = Math.max(0.0D, Math.min(2.0D,
+                normalSpeed * skipTicks / skippedTime));
+
+        if (elapsedMillis < skipMillis) {
+            double progress = elapsedMillis / (double) skipMillis;
+            double eased = smootherStepWithEndVelocity(progress, endSlope);
+            long interpolated = this.startTimeOfDay
+                    + Math.round((this.endTimeOfDay - this.startTimeOfDay) * eased);
+            world.setTimeOfDay(interpolated);
+        } else {
+            double restElapsedTicks = Math.min(
+                    VERTEX_REST_TICKS,
+                    Math.max(0.0D, (elapsedMillis - skipMillis) / 50.0D));
+            long normalAdvance = Math.max(0L, (long) Math.floor(restElapsedTicks * normalSpeed));
+            world.setTimeOfDay(this.endTimeOfDay + normalAdvance);
         }
 
-        double progress = elapsedMillis / (double) skipMillis;
-        double eased = smootherStep(progress);
-        long delta = this.endTimeOfDay - this.startTimeOfDay;
-        long interpolated = this.startTimeOfDay + (long) (delta * eased);
-        world.setTimeOfDay(interpolated);
+        if (elapsedMillis >= totalMillis) {
+            long finalAdvance = Math.max(0L, (long) Math.floor(VERTEX_REST_TICKS * normalSpeed));
+            long finalTime = this.endTimeOfDay + finalAdvance;
+            world.setTimeOfDay(finalTime);
+            SkyAngleInterpolationState.finishSleepTransition(world, finalTime, world.getTime());
+            this.reset();
+        }
+
+        // The state has already written the synchronized server-equivalent time.
         ci.cancel();
     }
 
     @Unique
-    private static double smootherStep(double value) {
+    private static double smootherStepWithEndVelocity(double value, double endVelocity) {
         if (Double.isNaN(value) || value <= 0.0D) return 0.0D;
         if (value >= 1.0D) return 1.0D;
+
         double x = value;
-        return x * x * x * (x * (x * 6.0D - 15.0D) + 10.0D);
+        double m = Math.max(0.0D, Math.min(2.0D, endVelocity));
+        double x2 = x * x;
+        double x3 = x2 * x;
+        double x4 = x3 * x;
+        double x5 = x4 * x;
+        return x3 * (10.0D - 4.0D * m)
+                + x4 * (7.0D * m - 15.0D)
+                + x5 * (6.0D - 3.0D * m);
     }
 }
