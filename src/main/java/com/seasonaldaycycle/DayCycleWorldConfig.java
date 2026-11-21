@@ -38,7 +38,9 @@ public final class DayCycleWorldConfig {
     }
 
     public static long getElapsedDayOffsetDays(ServerWorld world) {
-        return getConfig(world).elapsedDayOffsetDays;
+        if (world == null) return 0L;
+        Config config = getConfig(world);
+        return VertexCalendarState.get(world, config.elapsedDayOffsetDays).getDayOffsetDays();
     }
 
     public static void setCycleLengthTicks(ServerWorld world, long ticks) {
@@ -53,10 +55,7 @@ public final class DayCycleWorldConfig {
     public static void setElapsedDayOffsetDays(ServerWorld world, long offsetDays) {
         if (world == null) return;
         Config config = getConfig(world);
-        long value = sanitizeElapsedDayOffsetDays(offsetDays);
-        if (config.elapsedDayOffsetDays == value) return;
-        config.elapsedDayOffsetDays = value;
-        save(world.getServer(), config);
+        VertexCalendarState.get(world, config.elapsedDayOffsetDays).setDayOffsetDays(offsetDays);
     }
 
     public static long sanitizeElapsedDayOffsetDays(long offsetDays) {
