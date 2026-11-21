@@ -129,7 +129,7 @@ public final class VertexHudOverlay {
         return 12;
     }
 
-    private static String formatMinecraftTime(long ticks) {
+    public static String formatMinecraftTime(long ticks) {
         long shifted = Math.floorMod(ticks + 6000L, 24000L);
         long hours = shifted / 1000L;
         long minutes = (shifted % 1000L) * 60L / 1000L;
