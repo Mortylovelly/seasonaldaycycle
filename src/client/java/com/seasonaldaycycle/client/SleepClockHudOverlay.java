@@ -10,7 +10,7 @@ import net.minecraft.world.World;
 
 import java.util.Locale;
 
-/** A small vanilla clock and the current Vertex time during an actual sleep transition. */
+/** A vanilla clock and live Minecraft time drawn over the actual sleeping screen. */
 public final class SleepClockHudOverlay {
     private static final int CLOCK_SCALE = 2;
     private static final int INTRO_TICKS = 12;
@@ -20,7 +20,12 @@ public final class SleepClockHudOverlay {
     private SleepClockHudOverlay() {
     }
 
-    public static void render(DrawContext context, int screenWidth, int screenHeight, float tickDelta) {
+    /**
+     * stopButtonTopY is read from SleepingChatScreen so the label always stays
+     * below the icon and safely above the "Leave Bed" button.
+     */
+    public static void render(DrawContext context, int screenWidth, int screenHeight,
+                              float tickDelta, int stopButtonTopY) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null || client.world == null) return;
         if (client.world.getRegistryKey() != World.OVERWORLD || !client.player.isSleeping()) return;
@@ -49,13 +54,12 @@ public final class SleepClockHudOverlay {
         String timeText = formatMinecraftTime(timeOfDay);
 
         int centerX = screenWidth / 2;
-        int iconY = screenHeight - 84;
+        int iconY = Math.max(4, Math.min(screenHeight - 48, stopButtonTopY - 58));
         double verticalOffset = (1.0 - intro) * 8.0 + outro * 4.0;
         double iconSizeFactor = 0.92 + 0.08 * intro - 0.04 * outro;
         float alpha = (float) opacity;
 
-        // The actual vanilla item is rendered, so its clock face keeps Minecraft's
-        // normal world-time animation instead of using a static imitation.
+        // The real vanilla clock item keeps its normal animated clock face.
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
         RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, alpha);
