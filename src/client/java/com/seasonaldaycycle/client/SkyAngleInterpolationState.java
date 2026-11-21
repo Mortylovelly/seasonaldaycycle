@@ -23,6 +23,7 @@ public final class SkyAngleInterpolationState {
     private static final int SLEEP_RESUME_TRANSITION_TICKS = 28;
     private static final long MAX_CATCH_UP_TICKS = 2400L;
     private static final Map<LunarWorldView, State> STATES = new WeakHashMap<>();
+    private static double serverDayOffsetTicks;
 
     private SkyAngleInterpolationState() {}
 
@@ -32,25 +33,47 @@ public final class SkyAngleInterpolationState {
 
     public static synchronized void clearAll() {
         STATES.clear();
+        serverDayOffsetTicks = 0.0D;
+    }
+
+    /**
+     * Applies the server's persistent day offset. On the initial join sync, already
+     * initialized client clocks are rebased once; later updates leave their live
+     * timeline untouched so /time set cannot double-count the offset.
+     */
+    public static synchronized void setServerDayOffsetDays(long offsetDays, boolean initialSync) {
+        long safeDays = Math.max(-1_000_000_000_000L,
+                Math.min(1_000_000_000_000L, offsetDays));
+        double nextOffset = safeDays * DAY_LENGTH;
+        double difference = nextOffset - serverDayOffsetTicks;
+        serverDayOffsetTicks = nextOffset;
+
+        if (initialSync && difference != 0.0D) {
+            for (State state : STATES.values()) {
+                if (state.initialized) state.visualTime += difference;
+            }
+        }
     }
 
     public static synchronized void acceptServerTime(LunarWorldView lunarWorld, long serverTime, long clientTick) {
         if (!(lunarWorld instanceof World world) || !world.isClient()) return;
         State state = get(lunarWorld);
 
+        double adjustedServerTime = (double) serverTime + serverDayOffsetTicks;
         if (SeamlessSleepClientCompat.isSleepAnimationActive()) {
-            synchronizeDuringSleep(state, world, world.getTimeOfDay(), clientTick);
+            synchronizeDuringSleep(
+                    state, world, world.getTimeOfDay() + serverDayOffsetTicks, clientTick);
             return;
         }
         if (!state.initialized) {
-            initialize(state, serverTime, clientTick, world);
+            initialize(state, (long) Math.floor(adjustedServerTime), clientTick, world);
             return;
         }
 
         refreshSeason(state, world, clientTick);
         resumeAfterSleepIfNeeded(state);
         advanceWholeTicks(state, clientTick);
-        double error = shortestPhaseDifference(serverTime, state.visualTime);
+        double error = shortestPhaseDifference(adjustedServerTime, state.visualTime);
 
         // Normal packet rounding is ignored; small drift is corrected without reversing time.
         if (Math.abs(error) <= SMALL_PACKET_ERROR) return;
@@ -78,12 +101,15 @@ public final class SkyAngleInterpolationState {
         }
 
         if (SeamlessSleepClientCompat.isSleepAnimationActive()) {
-            double sleepTime = lunarWorld.getLunarTime();
+            double sleepTime = lunarWorld.getLunarTime() + serverDayOffsetTicks;
             synchronizeDuringSleep(state, world, sleepTime, clientTick);
             return sleepTime;
         }
 
-        if (!state.initialized) initialize(state, world.getLunarTime(), clientTick, world);
+        if (!state.initialized) {
+            initialize(state, (long) Math.floor(world.getLunarTime() + serverDayOffsetTicks),
+                    clientTick, world);
+        }
         refreshSeason(state, world, clientTick);
         resumeAfterSleepIfNeeded(state);
         advanceWholeTicks(state, clientTick);
@@ -138,10 +164,11 @@ public final class SkyAngleInterpolationState {
         if (!(lunarWorld instanceof World world) || !world.isClient()) return;
 
         State state = get(lunarWorld);
+        long adjustedSunrise = (long) Math.floor(sunriseTime + serverDayOffsetTicks);
         if (!state.initialized) {
-            initialize(state, sunriseTime, clientTick, world);
+            initialize(state, adjustedSunrise, clientTick, world);
         }
-        state.visualTime = sunriseTime;
+        state.visualTime = adjustedSunrise;
         state.lastClientTick = clientTick;
         state.lastSeasonRefresh = clientTick;
         state.subSeason = readSubSeason(world);
