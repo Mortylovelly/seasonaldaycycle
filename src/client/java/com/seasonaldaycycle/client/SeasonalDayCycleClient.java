@@ -79,9 +79,16 @@ public final class SeasonalDayCycleClient implements ClientModInitializer {
                                 payload.available(), payload.multiplier(), payload.canEdit())));
 
         ClientPlayNetworking.registerGlobalReceiver(CalendarProgressSyncPayload.TYPE, (payload, player, responseSender) ->
-                MinecraftClient.getInstance().execute(() ->
-                        SkyAngleInterpolationState.setServerDayOffsetDays(
-                                payload.dayOffsetDays(), payload.initialSync())));
+                MinecraftClient.getInstance().execute(() -> {
+                    MinecraftClient client = MinecraftClient.getInstance();
+                    if (client.world == null) return;
+                    SkyAngleInterpolationState.setServerCalendarState(
+                            payload.dayOffsetDays(),
+                            payload.calendarTime(),
+                            client.world.getTime(),
+                            client.world
+                    );
+                }));
 
         ClientPlayNetworking.registerGlobalReceiver(OpenDayCycleScreenPayload.TYPE, (payload, player, responseSender) ->
                 VertexPanelController.openMain(MinecraftClient.getInstance()));
