@@ -3,7 +3,7 @@ package com.seasonaldaycycle.mixin;
 import com.seasonaldaycycle.client.SleepClockHudOverlay;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.ChatScreen;
+import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.SleepingChatScreen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import org.spongepowered.asm.mixin.Mixin;
@@ -12,13 +12,12 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * SleepingChatScreen inherits its render implementation from ChatScreen.
- * Inject into the class that actually declares render(), then restrict the
- * overlay to the sleeping screen instance.
+ * Screen.renderWithTooltip is the concrete Screen-owned rendering entry point.
+ * The overlay is drawn only while the vanilla sleeping screen is active.
  */
-@Mixin(ChatScreen.class)
+@Mixin(Screen.class)
 public abstract class SleepingChatScreenRenderMixin {
-    @Inject(method = "render", at = @At("TAIL"))
+    @Inject(method = "renderWithTooltip", at = @At("TAIL"))
     private void seasonaldaycycle$renderSleepClock(
             DrawContext context, int mouseX, int mouseY, float delta, CallbackInfo ci) {
         MinecraftClient client = MinecraftClient.getInstance();
