@@ -17,12 +17,8 @@ public final class SleepClockHudOverlay {
     private SleepClockHudOverlay() {
     }
 
-    /**
-     * stopButtonTopY is read from SleepingChatScreen so the label always stays
-     * below the icon and safely above the "Leave Bed" button.
-     */
     public static void render(DrawContext context, int screenWidth, int screenHeight,
-                              float tickDelta, int stopButtonTopY) {
+                              float tickDelta) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null || client.world == null) return;
         if (client.world.getRegistryKey() != World.OVERWORLD || !client.player.isSleeping()) return;
@@ -48,7 +44,9 @@ public final class SleepClockHudOverlay {
         String timeText = VertexHudOverlay.formatMinecraftTime(timeOfDay);
 
         int centerX = screenWidth / 2;
-        int iconY = Math.max(4, Math.min(screenHeight - 48, stopButtonTopY - 58));
+        // Fixed position relative to the bottom of the sleeping screen.
+        // This leaves a clear gap above the vanilla leave-bed button.
+        int iconY = Math.max(4, screenHeight - 98);
         double verticalOffset = (1.0 - intro) * 8.0 + outro * 4.0;
         double iconSizeFactor = 0.92 + 0.08 * intro - 0.04 * outro;
         float alpha = (float) opacity;

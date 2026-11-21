@@ -1,7 +1,6 @@
 package com.seasonaldaycycle.client;
 
 import com.seasonaldaycycle.ModConfig;
-import com.seasonaldaycycle.mixin.SleepingChatScreenAccessor;
 import com.seasonaldaycycle.network.DayCycleLengthSyncPayload;
 import com.seasonaldaycycle.network.OpenDayCycleScreenPayload;
 import com.seasonaldaycycle.network.SleepSettingsSyncPayload;
@@ -14,7 +13,6 @@ import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.SleepingChatScreen;
-import net.minecraft.client.gui.widget.ButtonWidget;
 
 import java.util.Collections;
 import java.util.Set;
@@ -31,25 +29,18 @@ public final class SeasonalDayCycleClient implements ClientModInitializer {
         VertexUiConfig.load();
         VertexKeyBindings.register();
 
-        // Use Fabric's supported per-screen render event instead of injecting
-        // into a Minecraft screen method. This runs after the sleeping screen,
-        // so the clock and time label are drawn above its widgets.
+        // Draw the clock and text after the actual sleeping screen.
+        // No Minecraft screen mixin or internal button accessor is needed.
         ScreenEvents.BEFORE_INIT.register((client, screen, scaledWidth, scaledHeight) -> {
             if (screen instanceof SleepingChatScreen && SLEEP_OVERLAY_SCREENS.add(screen)) {
                 ScreenEvents.afterRender(screen).register(
                         (renderedScreen, drawContext, mouseX, mouseY, tickDelta) -> {
-                            if (!(renderedScreen instanceof SleepingChatScreen sleepingScreen)) return;
+                            if (!(renderedScreen instanceof SleepingChatScreen)) return;
                             if (client.player == null || client.world == null) return;
 
-                            ButtonWidget stopButton =
-                                    ((SleepingChatScreenAccessor) (Object) sleepingScreen)
-                                            .seasonaldaycycle$getStopSleepingButton();
                             int width = client.getWindow().getScaledWidth();
                             int height = client.getWindow().getScaledHeight();
-                            int buttonTop = stopButton == null ? height - 40 : stopButton.getY();
-
-                            SleepClockHudOverlay.render(
-                                    drawContext, width, height, tickDelta, buttonTop);
+                            SleepClockHudOverlay.render(drawContext, width, height, tickDelta);
                         });
 
                 ScreenEvents.remove(screen).register(
