@@ -39,7 +39,7 @@ public final class DayCycleNetworking {
 
             if (SereneSeasonsCompat.setSeason(player.getServerWorld(), payload.seasonIndex())) {
                 DayCycleHandler.invalidateSeasonCache(player.getServerWorld());
-                syncWorldState(player);
+                syncWorldState(player.getServer());
             } else {
                 sendState(player);
             }
