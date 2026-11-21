@@ -1,5 +1,6 @@
 package com.seasonaldaycycle.mixin;
 
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.world.ClientWorld;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
@@ -38,8 +39,10 @@ public abstract class SeamlessSleepClientReleaseMixin {
     private boolean replayCompatMode;
 
     @Inject(method = "tick", at = @At("HEAD"), cancellable = true, remap = false)
-    private void vertex$mirrorWakeSettling(ClientWorld world, float partialTick, CallbackInfo ci) {
+    private void vertex$mirrorWakeSettling(CallbackInfo ci) {
         if (!this.active || this.replayCompatMode) return;
+        ClientWorld world = MinecraftClient.getInstance().world;
+        if (world == null) return;
 
         long elapsedMillis = Math.max(0L, System.currentTimeMillis() - this.startMillis);
         long totalMillis = Math.max(1L, this.durationTicks) * 50L;
