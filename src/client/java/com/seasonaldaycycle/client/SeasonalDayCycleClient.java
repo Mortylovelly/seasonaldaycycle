@@ -8,7 +8,6 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.minecraft.client.MinecraftClient;
 
 public final class SeasonalDayCycleClient implements ClientModInitializer {
@@ -64,9 +63,6 @@ public final class SeasonalDayCycleClient implements ClientModInitializer {
                 VertexHudOverlay.render(drawContext, width, height, tickDelta);
             }
 
-            // This overlay is independent of the normal calendar HUD and appears
-            // only after Seamless Sleep has actually started its transition.
-            SleepClockHudOverlay.render(drawContext, width, height, tickDelta);
         });
     }
 
