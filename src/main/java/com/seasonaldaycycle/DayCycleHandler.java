@@ -71,13 +71,16 @@ public final class DayCycleHandler {
         double targetSpeed = getTargetSpeed(currentTime, state.cachedSubSeason,
                 DayCycleWorldConfig.getCycleLengthTicks(level));
 
-        // Compare signed world-time movement against the exact speed used on the
-        // previous tick. This remains reliable even for very fast configured cycles
-        // and detects large forward or backward changes made by commands or plugins.
+        // World tick hooks can observe either the vanilla +1 step or the full
+        // configured step depending on the server integration order. Accept both so
+        // very fast day cycles are never mistaken for an external time command.
         if (state.lastKnownTime >= 0L && state.speedInitialized) {
             double observedAdvance = (double) currentTime - (double) state.lastKnownTime;
             double expectedAdvance = Math.max(1.0D, Math.round(state.currentSpeed) + 1.0D);
-            if (Math.abs(observedAdvance - expectedAdvance) > EXTERNAL_CHANGE_THRESHOLD) {
+            boolean looksLikeNormalTick =
+                    Math.abs(observedAdvance - 1.0D) <= EXTERNAL_CHANGE_THRESHOLD
+                    || Math.abs(observedAdvance - expectedAdvance) <= EXTERNAL_CHANGE_THRESHOLD;
+            if (Math.abs(observedAdvance) > EXTERNAL_CHANGE_THRESHOLD && !looksLikeNormalTick) {
                 preserveCalendarProgress(level, state, state.lastKnownTime, currentTime);
                 state.timeDecimalAccumulator = 0.0D;
                 state.lastKnownTime = currentTime;
