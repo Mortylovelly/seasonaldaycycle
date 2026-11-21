@@ -1,7 +1,6 @@
 package com.seasonaldaycycle.mixin;
 
 import com.seasonaldaycycle.client.SkyAngleInterpolationState;
-import com.seasonaldaycycle.client.SkyAngleInterpolationState;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.world.GameRules;
 import net.minecraft.world.World;
