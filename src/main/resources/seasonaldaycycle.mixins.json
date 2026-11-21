@@ -10,7 +10,9 @@
     "ClientPlayNetworkHandlerMixin",
     "DayCycleScreenRenderMixin",
     "DayCycleScreenMiniAccessor",
-    "SeamlessSleepClientReleaseMixin"
+    "SeamlessSleepClientReleaseMixin",
+    "SleepingChatScreenAccessor",
+    "SleepingChatScreenRenderMixin"
   ],
   "injectors": {
     "defaultRequire": 1
