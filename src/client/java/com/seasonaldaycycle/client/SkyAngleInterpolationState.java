@@ -118,6 +118,26 @@ public final class SkyAngleInterpolationState {
         state.correctionRemaining = 0.0;
     }
 
+    /**
+     * Anchors the client visual clock to the exact sunrise before leaving
+     * Seamless Sleep's clock ownership and beginning Vertex's normal-speed ramp.
+     */
+    public static synchronized void finishSleepTransition(
+            LunarWorldView lunarWorld, long sunriseTime, long clientTick) {
+        if (!(lunarWorld instanceof World world) || !world.isClient()) return;
+
+        State state = get(lunarWorld);
+        if (!state.initialized) {
+            initialize(state, sunriseTime, clientTick, world);
+        }
+        state.visualTime = sunriseTime;
+        state.lastClientTick = clientTick;
+        state.lastSeasonRefresh = clientTick;
+        state.subSeason = readSubSeason(world);
+        state.correctionRemaining = 0.0;
+        state.sleepAnimationWasActive = true;
+    }
+
     private static void resumeAfterSleepIfNeeded(State state) {
         if (!state.sleepAnimationWasActive) return;
         state.sleepAnimationWasActive = false;
