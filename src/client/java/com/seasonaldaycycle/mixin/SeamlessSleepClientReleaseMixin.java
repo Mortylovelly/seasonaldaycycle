@@ -1,5 +1,6 @@
 package com.seasonaldaycycle.mixin;
 
+import com.seasonaldaycycle.client.SkyAngleInterpolationState;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.world.ClientWorld;
 import org.spongepowered.asm.mixin.Mixin;
@@ -61,6 +62,8 @@ public abstract class SeamlessSleepClientReleaseMixin {
             // End the visual state without writing sunrise over the now-normal client clock.
             if (!this.vertex$releaseTimeApplied) {
                 world.setTimeOfDay(this.endTimeOfDay);
+                SkyAngleInterpolationState.finishSleepTransition(
+                        world, this.endTimeOfDay, world.getTime());
             }
             this.reset();
             ci.cancel();
@@ -73,6 +76,8 @@ public abstract class SeamlessSleepClientReleaseMixin {
             // Hold the exact sunrise while Vertex accelerates the normal world clock.
             if (!this.vertex$releaseTimeApplied) {
                 world.setTimeOfDay(this.endTimeOfDay);
+                SkyAngleInterpolationState.finishSleepTransition(
+                        world, this.endTimeOfDay, world.getTime());
                 this.vertex$releaseTimeApplied = true;
             }
             ci.cancel();
