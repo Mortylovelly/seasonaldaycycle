@@ -11,8 +11,7 @@
     "DayCycleScreenRenderMixin",
     "DayCycleScreenMiniAccessor",
     "SeamlessSleepClientReleaseMixin",
-    "SleepingChatScreenAccessor",
-    "SleepingChatScreenRenderMixin"
+    "SleepingChatScreenAccessor"
   ],
   "injectors": {
     "defaultRequire": 1
