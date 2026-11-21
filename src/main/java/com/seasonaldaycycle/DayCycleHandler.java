@@ -13,8 +13,8 @@ public final class DayCycleHandler {
     private static final long VANILLA_CYCLE = 24000L;
     private static final long EXTERNAL_CHANGE_THRESHOLD = 200L;
     private static final int SPEED_TRANSITION_TICKS = 40;
-    private static final int SLEEP_RELEASE_TRANSITION_TICKS =
-            SeamlessSleepCompat.WAKE_SETTLE_TICKS - 1;
+    // Leave the final 12 ticks as a quiet rest after the normal speed is reached.
+    private static final int SLEEP_RELEASE_TRANSITION_TICKS = 28;
 
     private DayCycleHandler() {}
 
@@ -32,8 +32,8 @@ public final class DayCycleHandler {
         }
 
         // Seamless Sleep owns the clock during the night-skip part. In its final
-        // 40 ticks, Vertex takes over and smoothly restores the normal day speed
-        // while the player is still lying in bed.
+        // 40 ticks, Vertex takes over, restores normal speed in 28 ticks, and
+        // leaves the player lying down for the remaining 12 ticks.
         if (SeamlessSleepCompat.isServerSleepAnimationActive(level)) {
             state.sleepAnimationWasActive = true;
             if (!SeamlessSleepCompat.isServerSleepReleasePhase(level)) {
