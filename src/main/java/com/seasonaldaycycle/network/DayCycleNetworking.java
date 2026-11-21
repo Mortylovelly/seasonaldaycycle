@@ -16,15 +16,17 @@ public final class DayCycleNetworking {
 
     public static void init() {
         ServerPlayNetworking.registerGlobalReceiver(SetDayCycleLengthPayload.TYPE, (payload, player, responseSender) -> {
-            if (player.getServer() == null) return;
-
-            if (!canEdit(player)) {
+            MinecraftServer server = player.getServer();
+            if (server == null) return;
+            if (!canEdit(player) || server.getOverworld() == null) {
                 sendState(player);
                 return;
             }
 
-            DayCycleWorldConfig.setCycleLengthTicks(player.getServerWorld(), payload.ticks());
-            syncWorldState(player);
+            // The day-cycle configuration belongs to the world save, not the
+            // dimension the command happens to be opened from.
+            DayCycleWorldConfig.setCycleLengthTicks(server.getOverworld(), payload.ticks());
+            syncWorldState(server);
         });
 
         ServerPlayNetworking.registerGlobalReceiver(SetSeasonPayload.TYPE, (payload, player, responseSender) -> {
@@ -61,23 +63,29 @@ public final class DayCycleNetworking {
 
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
             sendState(handler.player);
-            sendDayOffset(handler.player, true);
+            sendDayOffset(handler.player);
         });
     }
 
-    /** Sends the current calendar offset to every player on this server. */
+    /** Sends the exact server calendar time to every connected player. */
     public static void syncDayOffset(ServerWorld world, long offsetDays) {
         if (world == null || world.getServer() == null) return;
         long safeOffset = DayCycleWorldConfig.sanitizeElapsedDayOffsetDays(offsetDays);
+        long calendarTime = world.getTimeOfDay() + safeOffset * 24000L;
+        CalendarProgressSyncPayload payload =
+                new CalendarProgressSyncPayload(safeOffset, calendarTime);
         for (ServerPlayerEntity player : world.getServer().getPlayerManager().getPlayerList()) {
-            ServerPlayNetworking.send(player, new CalendarProgressSyncPayload(safeOffset, false));
+            ServerPlayNetworking.send(player, payload);
         }
     }
 
-    private static void sendDayOffset(ServerPlayerEntity player, boolean initialSync) {
+    private static void sendDayOffset(ServerPlayerEntity player) {
         if (player == null || player.getServer() == null) return;
-        long offset = DayCycleWorldConfig.getElapsedDayOffsetDays(player.getServerWorld());
-        ServerPlayNetworking.send(player, new CalendarProgressSyncPayload(offset, initialSync));
+        ServerWorld overworld = player.getServer().getOverworld();
+        if (overworld == null) return;
+        long offset = DayCycleWorldConfig.getElapsedDayOffsetDays(overworld);
+        long calendarTime = overworld.getTimeOfDay() + offset * 24000L;
+        ServerPlayNetworking.send(player, new CalendarProgressSyncPayload(offset, calendarTime));
     }
 
     private static boolean canEdit(ServerPlayerEntity player) {
@@ -86,8 +94,10 @@ public final class DayCycleNetworking {
     }
 
     private static void sendState(ServerPlayerEntity player) {
+        ServerWorld overworld = player.getServer() == null ? null : player.getServer().getOverworld();
+        if (overworld == null) return;
         ServerPlayNetworking.send(player, new DayCycleLengthSyncPayload(
-                (int) DayCycleWorldConfig.getCycleLengthTicks(player.getServerWorld()),
+                (int) DayCycleWorldConfig.getCycleLengthTicks(overworld),
                 canEdit(player),
                 (float) ModConfig.getSpringDayRatio(),
                 (float) ModConfig.getSummerDayRatio(),
@@ -115,9 +125,9 @@ public final class DayCycleNetworking {
         }
     }
 
-    private static void syncWorldState(ServerPlayerEntity source) {
-        if (source.getServer() == null) return;
-        for (ServerPlayerEntity player : source.getServer().getPlayerManager().getPlayerList()) {
+    private static void syncWorldState(MinecraftServer server) {
+        if (server == null) return;
+        for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
             sendState(player);
         }
     }
