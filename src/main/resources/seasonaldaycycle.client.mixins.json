@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "package": "com.seasonaldaycycle.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "client-seasonaldaycycle-refmap.json",
+  "client": [
+    "LunarWorldViewMixin",
+    "ClientPlayNetworkHandlerMixin",
+    "SeamlessSleepClientReleaseMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
