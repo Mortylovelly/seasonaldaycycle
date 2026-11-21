@@ -15,6 +15,9 @@ public interface LunarWorldViewMixin {
      * Uses a fractional visual time for the sky instead of Minecraft's whole-tick
      * day time. This keeps the logical/server time untouched while making the
      * sun and moon move continuously between server time updates.
+     *
+     * @author Mortylovelly
+     * @reason Use the continuous fractional client time when calculating the sky angle.
      */
     @Overwrite
     default float getSkyAngle(float tickDelta) {
