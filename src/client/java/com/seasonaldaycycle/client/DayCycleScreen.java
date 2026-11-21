@@ -27,8 +27,6 @@ public final class DayCycleScreen {
     private static final int CLOCK_CARD_WIDTH = 104;
     private static final int CLOCK_CARD_HEIGHT = 126;
 
-    private static final int MINI_PANEL_SIZE = 42;
-    private static final int MINI_HITBOX_PADDING = 8;
 
     private static final long MIN_TICKS = ModConfig.MIN_CYCLE_LENGTH_TICKS;
     private static final long MAX_TICKS = ModConfig.MAX_CYCLE_LENGTH_TICKS;
@@ -66,9 +64,6 @@ public final class DayCycleScreen {
     private long cycleLengthTicks;
     private int panelX;
     private int panelY;
-    private int miniX;
-    private int miniY;
-    private boolean minimized;
     private boolean showSeasonsPage;
     private boolean showHudSettingsPage;
     private boolean showSleepSettingsPage;
@@ -86,12 +81,8 @@ public final class DayCycleScreen {
     private double resizeStartMouseY;
     private float resizeStartScale;
     private boolean draggingSlider;
-    private boolean draggingMini;
-    private boolean miniPressCandidate;
     private int dragOffsetX;
     private int dragOffsetY;
-    private int miniPressStartX;
-    private int miniPressStartY;
     private long savedUntil;
     private boolean serverSynced;
     private int lastSoundStep = Integer.MIN_VALUE;
@@ -115,12 +106,7 @@ public final class DayCycleScreen {
             panelX = (width - visualPanelWidth()) / 2;
             panelY = Math.max(8, (height - visualPanelHeight()) / 2);
         }
-        if (miniX == 0 && miniY == 0) {
-            miniX = panelX;
-            miniY = panelY;
-        }
         clampPanel(width, height);
-        clampMini(width, height);
     }
 
     public void renderOverlay(DrawContext context, int mouseX, int mouseY, float delta) {
@@ -130,11 +116,6 @@ public final class DayCycleScreen {
 
         if (panelX == 0 && panelY == 0) {
             init(width, height);
-        }
-
-        if (minimized) {
-            renderMinimized(context, mouseX, mouseY);
-            return;
         }
 
         context.getMatrices().push();
@@ -148,24 +129,6 @@ public final class DayCycleScreen {
         drawContent(context, localMouseX, localMouseY);
         drawResizeGrip(context);
 
-        context.getMatrices().pop();
-    }
-
-    private void renderMinimized(DrawContext context, int mouseX, int mouseY) {
-        boolean hover = isMiniHovered(mouseX, mouseY);
-        int clockX = miniX + (MINI_PANEL_SIZE - 16) / 2;
-        int clockY = miniY + (MINI_PANEL_SIZE - 16) / 2;
-
-        context.fill(miniX, miniY, miniX + MINI_PANEL_SIZE, miniY + MINI_PANEL_SIZE,
-                hover ? 0x664F5964 : 0x443F4851);
-        context.fill(miniX, miniY, miniX + MINI_PANEL_SIZE, miniY + 1,
-                hover ? 0xCCCDD3D9 : 0x667F8790);
-        context.fill(miniX, miniY + MINI_PANEL_SIZE - 1, miniX + MINI_PANEL_SIZE, miniY + MINI_PANEL_SIZE,
-                0x445F6871);
-
-        context.getMatrices().push();
-        context.getMatrices().translate(clockX + 8, clockY + 8, 0.0f);
-        context.drawItem(new ItemStack(Items.CLOCK), -8, -8);
         context.getMatrices().pop();
     }
 
@@ -183,7 +146,6 @@ public final class DayCycleScreen {
                 : showSeasonsPage ? "Календарь и сезоны" : "Настройки суток";
         context.drawTextWithShadow(textRenderer, Text.literal(panelTitle),
                 panelX + 14, panelY + 9, 0xFFFFFFFF);
-        drawMinimizeButton(context, mouseX, mouseY);
         drawCloseButton(context, mouseX, mouseY);
         drawTabs(context, mouseX, mouseY);
 
@@ -629,14 +591,6 @@ public final class DayCycleScreen {
         context.drawCenteredTextWithShadow(MinecraftClient.getInstance().textRenderer, "×", x + 11, y + 2, hover ? 0xFFFFFFFF : 0xFFE8EBEE);
     }
 
-    private void drawMinimizeButton(DrawContext context, int mouseX, int mouseY) {
-        int x = panelX + PANEL_WIDTH - 57;
-        int y = panelY + 6;
-        boolean hover = inside(mouseX, mouseY, x, y, 22, 22);
-        context.fill(x, y, x + 22, y + 22, hover ? 0xCC4A4F57 : 0x88464A51);
-        context.drawCenteredTextWithShadow(MinecraftClient.getInstance().textRenderer, "−", x + 11, y + 2, hover ? 0xFFFFFFFF : 0xFFE8EBEE);
-    }
-
     private void drawSlider(DrawContext context, int x, int y, int mouseX, int mouseY) {
         int trackY = y + 2;
         context.fill(x, trackY, x + SLIDER_WIDTH, trackY + SLIDER_HEIGHT, 0x99515760);
@@ -699,19 +653,6 @@ public final class DayCycleScreen {
         if (button != GLFW.GLFW_MOUSE_BUTTON_LEFT) return false;
 
         if (action == GLFW.GLFW_PRESS) {
-            if (minimized) {
-                if (isMiniHovered(mouseX, mouseY)) {
-                    miniPressCandidate = true;
-                    draggingMini = false;
-                    miniPressStartX = (int) mouseX;
-                    miniPressStartY = (int) mouseY;
-                    dragOffsetX = miniPressStartX - miniX;
-                    dragOffsetY = miniPressStartY - miniY;
-                    return true;
-                }
-                return false;
-            }
-
             int x = toLogicalX(mouseX);
             int y = toLogicalY(mouseY);
 
@@ -730,20 +671,7 @@ public final class DayCycleScreen {
             int closeY = panelY + 6;
             if (inside(x, y, closeX, closeY, 22, 22)) {
                 playUiSound(1.15f);
-                close();
-                return true;
-            }
-
-            int minimizeX = panelX + PANEL_WIDTH - 57;
-            int minimizeY = panelY + 6;
-            if (inside(x, y, minimizeX, minimizeY, 22, 22)) {
-                miniX = panelX;
-                miniY = panelY;
-                clampMini(MinecraftClient.getInstance().getWindow().getScaledWidth(), MinecraftClient.getInstance().getWindow().getScaledHeight());
-                minimized = true;
-                draggingPanel = false;
-                draggingSlider = false;
-                playUiSound(0.92f);
+                VertexPanelController.close(MinecraftClient.getInstance());
                 return true;
             }
 
@@ -932,20 +860,6 @@ public final class DayCycleScreen {
         }
 
         if (action == GLFW.GLFW_RELEASE) {
-            if (minimized && (miniPressCandidate || draggingMini)) {
-                boolean shouldOpen = miniPressCandidate && !draggingMini;
-                miniPressCandidate = false;
-                draggingMini = false;
-                if (shouldOpen) {
-                    minimized = false;
-                    panelX = miniX;
-                    panelY = miniY;
-                    clampPanel(MinecraftClient.getInstance().getWindow().getScaledWidth(), MinecraftClient.getInstance().getWindow().getScaledHeight());
-                    playUiSound(1.12f);
-                }
-                return true;
-            }
-
             boolean wasDraggingPanel = draggingPanel;
             boolean wasResizingPanel = resizingPanel;
             boolean wasDraggingSlider = draggingSlider;
@@ -979,23 +893,6 @@ public final class DayCycleScreen {
     }
 
     public boolean handleMouseMove(double mouseX, double mouseY) {
-        if (minimized && miniPressCandidate) {
-            int dx = (int) mouseX - miniPressStartX;
-            int dy = (int) mouseY - miniPressStartY;
-            if (!draggingMini && dx * dx + dy * dy >= 9) {
-                draggingMini = true;
-            }
-            if (draggingMini) {
-                miniX = (int) mouseX - dragOffsetX;
-                miniY = (int) mouseY - dragOffsetY;
-                int width = MinecraftClient.getInstance().getWindow().getScaledWidth();
-                int height = MinecraftClient.getInstance().getWindow().getScaledHeight();
-                clampMini(width, height);
-                return true;
-            }
-            return true;
-        }
-
         if (resizingPanel) {
             double horizontalDelta = (mouseX - resizeStartMouseX) / (double) PANEL_WIDTH;
             double verticalDelta = (mouseY - resizeStartMouseY) / (double) Math.max(1, getPanelHeight());
@@ -1013,9 +910,6 @@ public final class DayCycleScreen {
             int width = MinecraftClient.getInstance().getWindow().getScaledWidth();
             int height = MinecraftClient.getInstance().getWindow().getScaledHeight();
             clampPanel(width, height);
-            miniX = panelX;
-            miniY = panelY;
-            clampMini(width, height);
             return true;
         }
 
@@ -1036,7 +930,7 @@ public final class DayCycleScreen {
     }
 
     public boolean handleMouseScroll(double mouseX, double mouseY, double verticalAmount) {
-        if (minimized || verticalAmount == 0.0) return false;
+        if (verticalAmount == 0.0) return false;
         int x = toLogicalX(mouseX);
         int y = toLogicalY(mouseY);
         if (showHudSettingsPage) {
@@ -1203,19 +1097,6 @@ public final class DayCycleScreen {
         panelY = Math.max(6, Math.min(panelY, height - visualPanelHeight() - 6));
     }
 
-    private void clampMini(int width, int height) {
-        miniX = Math.max(4, Math.min(miniX, width - MINI_PANEL_SIZE - 4));
-        miniY = Math.max(4, Math.min(miniY, height - MINI_PANEL_SIZE - 4));
-    }
-
-    private boolean isMiniHovered(double mouseX, double mouseY) {
-        return inside(mouseX, mouseY,
-                miniX - MINI_HITBOX_PADDING,
-                miniY - MINI_HITBOX_PADDING,
-                MINI_PANEL_SIZE + MINI_HITBOX_PADDING * 2,
-                MINI_PANEL_SIZE + MINI_HITBOX_PADDING * 2);
-    }
-
     private static void drawFittedText(DrawContext context, net.minecraft.client.font.TextRenderer renderer,
                                        String value, int x, int y, int maxWidth, int color) {
         String fitted = renderer.trimToWidth(value, Math.max(1, maxWidth));
@@ -1244,8 +1125,6 @@ public final class DayCycleScreen {
         draggingSlider = false;
         draggingHudScale = false;
         draggingSleepDuration = false;
-        draggingMini = false;
-        miniPressCandidate = false;
         // Cursor mode is controlled exclusively by Minecraft AI Agent.
     }
 }

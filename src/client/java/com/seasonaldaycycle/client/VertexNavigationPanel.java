@@ -13,8 +13,6 @@ public final class VertexNavigationPanel {
     private static final int WIDTH_PAGE = 360;
     private static final int HEIGHT_PAGE = 252;
     private static final int HEADER_HEIGHT = 29;
-    private static final int MINI_SIZE = 42;
-    private static final int MINI_PADDING = 8;
 
     private static final int COLOR_PANEL = 0x8A666B73;
     private static final int COLOR_HEADER = 0x9B777C84;
@@ -23,45 +21,17 @@ public final class VertexNavigationPanel {
     private final boolean worldPage;
     private int panelX;
     private int panelY;
-    private int miniX;
-    private int miniY;
     private boolean initialized;
-    private boolean minimized;
     private boolean draggingPanel;
     private boolean resizingPanel;
     private double resizeStartMouseX;
     private double resizeStartMouseY;
     private float resizeStartScale;
-    private boolean draggingMini;
-    private boolean miniPressCandidate;
     private int dragOffsetX;
     private int dragOffsetY;
-    private int miniPressStartX;
-    private int miniPressStartY;
 
-    public VertexNavigationPanel(boolean worldPage, boolean minimized) {
+    public VertexNavigationPanel(boolean worldPage) {
         this.worldPage = worldPage;
-        this.minimized = minimized;
-    }
-
-    public void setMiniPosition(int x, int y) {
-        if (x >= 0 && y >= 0) {
-            this.miniX = x;
-            this.miniY = y;
-            this.initialized = false;
-        }
-    }
-
-    public boolean hasMiniPosition() {
-        return miniX >= 0 && miniY >= 0;
-    }
-
-    public int getMiniX() {
-        return miniX;
-    }
-
-    public int getMiniY() {
-        return miniY;
     }
 
     public void renderOverlay(DrawContext context, int mouseX, int mouseY, float delta) {
@@ -69,11 +39,6 @@ public final class VertexNavigationPanel {
         int width = client.getWindow().getScaledWidth();
         int height = client.getWindow().getScaledHeight();
         ensureInitialized(width, height);
-
-        if (minimized) {
-            renderMinimized(context, mouseX, mouseY);
-            return;
-        }
 
         int panelWidth = getPanelWidth();
         int panelHeight = getPanelHeight();
@@ -105,19 +70,6 @@ public final class VertexNavigationPanel {
         ensureInitialized(client.getWindow().getScaledWidth(), client.getWindow().getScaledHeight());
 
         if (action == GLFW.GLFW_PRESS) {
-            if (minimized) {
-                if (isMiniHovered(mouseX, mouseY)) {
-                    miniPressCandidate = true;
-                    draggingMini = false;
-                    miniPressStartX = (int) mouseX;
-                    miniPressStartY = (int) mouseY;
-                    dragOffsetX = miniPressStartX - miniX;
-                    dragOffsetY = miniPressStartY - miniY;
-                    return true;
-                }
-                return false;
-            }
-
             int x = toLogicalX(mouseX);
             int y = toLogicalY(mouseY);
             int width = getPanelWidth();
@@ -134,15 +86,6 @@ public final class VertexNavigationPanel {
 
             if (inside(x, y, panelX + width - 29, panelY + 6, 22, 22)) {
                 VertexPanelController.close(client);
-                return true;
-            }
-
-            if (inside(x, y, panelX + width - 57, panelY + 6, 22, 22)) {
-                minimized = true;
-                draggingPanel = false;
-                draggingMini = false;
-                miniPressCandidate = false;
-                clampMini(client.getWindow().getScaledWidth(), client.getWindow().getScaledHeight());
                 return true;
             }
 
@@ -179,16 +122,6 @@ public final class VertexNavigationPanel {
         }
 
         if (action == GLFW.GLFW_RELEASE) {
-            if (minimized && (miniPressCandidate || draggingMini)) {
-                boolean open = miniPressCandidate && !draggingMini;
-                miniPressCandidate = false;
-                draggingMini = false;
-                if (open) {
-                    minimized = false;
-                }
-                return true;
-            }
-
             boolean wasResizing = resizingPanel;
             boolean dragged = draggingPanel || wasResizing;
             if (wasResizing) VertexUiConfig.commitScale();
@@ -201,20 +134,6 @@ public final class VertexNavigationPanel {
     }
 
     public boolean handleMouseMove(double mouseX, double mouseY) {
-        if (minimized && miniPressCandidate) {
-            int dx = (int) mouseX - miniPressStartX;
-            int dy = (int) mouseY - miniPressStartY;
-            if (!draggingMini && dx * dx + dy * dy >= 9) {
-                draggingMini = true;
-            }
-            if (draggingMini) {
-                miniX = (int) mouseX - dragOffsetX;
-                miniY = (int) mouseY - dragOffsetY;
-                clampMini(MinecraftClient.getInstance().getWindow().getScaledWidth(), MinecraftClient.getInstance().getWindow().getScaledHeight());
-            }
-            return true;
-        }
-
         if (resizingPanel) {
             double horizontalDelta = (mouseX - resizeStartMouseX) / (double) getPanelWidth();
             double verticalDelta = (mouseY - resizeStartMouseY) / (double) Math.max(1, getPanelHeight());
@@ -230,9 +149,6 @@ public final class VertexNavigationPanel {
             panelX = (int) mouseX - dragOffsetX;
             panelY = (int) mouseY - dragOffsetY;
             clampPanel(MinecraftClient.getInstance().getWindow().getScaledWidth(), MinecraftClient.getInstance().getWindow().getScaledHeight());
-            miniX = panelX;
-            miniY = panelY;
-            clampMini(MinecraftClient.getInstance().getWindow().getScaledWidth(), MinecraftClient.getInstance().getWindow().getScaledHeight());
             return true;
         }
 
@@ -247,12 +163,7 @@ public final class VertexNavigationPanel {
                 panelX = (width - Math.round(panelWidth * getUiScale())) / 2;
                 panelY = Math.max(6, (height - Math.round(panelHeight * getUiScale())) / 2);
             }
-            if (miniX < 0 || miniY < 0) {
-                miniX = panelX;
-                miniY = panelY;
-            }
             clampPanel(width, height);
-            clampMini(width, height);
             initialized = true;
         }
     }
@@ -291,12 +202,8 @@ public final class VertexNavigationPanel {
             context.drawTextWithShadow(renderer, Text.literal("Vertex"), panelX + 18, panelY + 9, 0xFFFFFFFF);
         }
 
-        int minimizeX = panelX + width - 57;
         int closeX = panelX + width - 29;
-        boolean minHover = inside(mouseX, mouseY, minimizeX, panelY + 6, 22, 22);
         boolean closeHover = inside(mouseX, mouseY, closeX, panelY + 6, 22, 22);
-        context.fill(minimizeX, panelY + 6, minimizeX + 22, panelY + 28, minHover ? 0xCC4A4F57 : 0x88464A51);
-        context.drawCenteredTextWithShadow(renderer, "−", minimizeX + 11, panelY + 8, minHover ? 0xFFFFFFFF : 0xFFE8EBEE);
         context.fill(closeX, panelY + 6, closeX + 22, panelY + 28, closeHover ? 0xCC4A4F57 : 0x88464A51);
         context.drawCenteredTextWithShadow(renderer, "×", closeX + 11, panelY + 8, closeHover ? 0xFFFFFFFF : 0xFFE8EBEE);
     }
@@ -335,20 +242,6 @@ public final class VertexNavigationPanel {
         context.drawTextWithShadow(renderer, Text.literal("Открыть настройки"), left + 58, cardY + 49, 0xFFE1E5E9);
 
         context.drawTextWithShadow(renderer, Text.literal("Другие инструменты мира появятся здесь"), left, cardY + 91, 0xFF929AA4);
-    }
-
-    private void renderMinimized(DrawContext context, int mouseX, int mouseY) {
-        boolean hover = isMiniHovered(mouseX, mouseY);
-        context.fill(miniX, miniY, miniX + MINI_SIZE, miniY + MINI_SIZE,
-                hover ? 0x664F5964 : 0x443F4851);
-        context.fill(miniX, miniY, miniX + MINI_SIZE, miniY + 1,
-                hover ? 0xCCCDD3D9 : 0x667F8790);
-        context.fill(miniX, miniY + MINI_SIZE - 1, miniX + MINI_SIZE, miniY + MINI_SIZE,
-                0x445F6871);
-        context.getMatrices().push();
-        context.getMatrices().translate(miniX + 21, miniY + 21, 0.0f);
-        context.drawItem(new ItemStack(Items.CLOCK), -8, -8);
-        context.getMatrices().pop();
     }
 
     private String fitText(String value, int maxWidth) {
@@ -412,19 +305,6 @@ public final class VertexNavigationPanel {
         int visualHeight = Math.max(1, Math.round(getPanelHeight() * getUiScale()));
         panelX = Math.max(6, Math.min(panelX, width - visualWidth - 6));
         panelY = Math.max(6, Math.min(panelY, height - visualHeight - 6));
-    }
-
-    private void clampMini(int width, int height) {
-        miniX = Math.max(4, Math.min(miniX, width - MINI_SIZE - 4));
-        miniY = Math.max(4, Math.min(miniY, height - MINI_SIZE - 4));
-    }
-
-    private boolean isMiniHovered(double mouseX, double mouseY) {
-        return inside(mouseX, mouseY,
-                miniX - MINI_PADDING,
-                miniY - MINI_PADDING,
-                MINI_SIZE + MINI_PADDING * 2,
-                MINI_SIZE + MINI_PADDING * 2);
     }
 
     private static boolean inside(double mouseX, double mouseY, int x, int y, int width, int height) {

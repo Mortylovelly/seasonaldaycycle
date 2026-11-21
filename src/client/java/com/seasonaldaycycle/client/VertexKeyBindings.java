@@ -6,12 +6,10 @@ import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import org.lwjgl.glfw.GLFW;
 
-/** User-remappable shortcut for opening the Vertex panel. */
+/** User-remappable shortcut for toggling the Vertex panel. */
 public final class VertexKeyBindings {
     private static KeyBinding openMenu;
-
-    private VertexKeyBindings() {
-    }
+    private VertexKeyBindings() {}
 
     public static void register() {
         if (openMenu != null) return;
@@ -24,12 +22,8 @@ public final class VertexKeyBindings {
     }
 
     public static void tick(MinecraftClient client) {
-        if (openMenu == null || client.player == null || client.world == null || client.currentScreen != null) {
-            return;
-        }
-
-        while (openMenu.wasPressed()) {
-            VertexPanelController.openMain(client);
-        }
+        if (openMenu == null || client.player == null || client.world == null
+                || client.currentScreen != null) return;
+        while (openMenu.wasPressed()) VertexPanelController.toggleMenu(client);
     }
 }

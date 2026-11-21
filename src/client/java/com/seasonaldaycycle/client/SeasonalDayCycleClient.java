@@ -88,15 +88,16 @@ public final class SeasonalDayCycleClient implements ClientModInitializer {
             if (VertexPanelController.isActive()) {
                 VertexPanelController.render(drawContext,
                         (int) Math.round(pointer.x()), (int) Math.round(pointer.y()), 0.0f);
-            } else {
-                VertexHudOverlay.render(drawContext, width, height, tickDelta);
             }
+
+            // Keep date/time visible above the panel for live HUD positioning and scale preview.
+            VertexHudOverlay.render(drawContext, width, height, tickDelta);
         });
     }
 
     private static void resetForWorldExit() {
         MinecraftClient client = MinecraftClient.getInstance();
-        if (VertexPanelController.isActive()) VertexPanelController.close(client);
+        if (VertexPanelController.isActive()) VertexPanelController.closeImmediately(client);
         else {
             DayCycleScreen screen = DayCycleScreen.getActive();
             if (screen != null) screen.close();

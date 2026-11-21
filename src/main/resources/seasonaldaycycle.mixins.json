@@ -8,8 +8,6 @@
   "client": [
     "LunarWorldViewMixin",
     "ClientPlayNetworkHandlerMixin",
-    "DayCycleScreenRenderMixin",
-    "DayCycleScreenMiniAccessor",
     "SeamlessSleepClientReleaseMixin"
   ],
   "injectors": {

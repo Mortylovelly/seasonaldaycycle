@@ -11,73 +11,62 @@ import net.minecraft.world.World;
 /** A vanilla clock and live Minecraft time drawn over the actual sleeping screen. */
 public final class SleepClockHudOverlay {
     private static final int CLOCK_SCALE = 2;
-    private static final int INTRO_TICKS = 12;
-    private static final int MAX_OUTRO_TICKS = 24;
+    private static final double MIN_FADE_TICKS = 18.0D;
+    private static final double MAX_FADE_TICKS = 40.0D;
+    private SleepClockHudOverlay() {}
 
-    private SleepClockHudOverlay() {
-    }
-
-    public static void render(DrawContext context, int screenWidth, int screenHeight,
-                              float tickDelta) {
+    public static void render(DrawContext context, int screenWidth, int screenHeight, float tickDelta) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null || client.world == null) return;
         if (client.world.getRegistryKey() != World.OVERWORLD || !client.player.isSleeping()) return;
-
         SeamlessSleepClientCompat.SleepProgress sleep =
                 SeamlessSleepClientCompat.getSleepAnimationProgress();
         if (sleep == null) return;
 
-        double totalTicks = Math.max(1.0, sleep.durationTicks());
-        double elapsedTicks = Math.max(0.0, Math.min(totalTicks, sleep.elapsedTicks()));
-
-        double introDuration = Math.min(INTRO_TICKS, Math.max(1.0, totalTicks * 0.25));
+        double totalTicks = Math.max(1.0D, sleep.durationTicks());
+        double elapsedTicks = Math.max(0.0D, Math.min(totalTicks, sleep.elapsedTicks()));
+        double introDuration = Math.min(MAX_FADE_TICKS, Math.max(MIN_FADE_TICKS, totalTicks * 0.24D));
+        double outroDuration = Math.min(MAX_FADE_TICKS, Math.max(MIN_FADE_TICKS, totalTicks * 0.24D));
         double intro = smootherStep(elapsedTicks / introDuration);
-        double outroDuration = Math.min(MAX_OUTRO_TICKS, Math.max(8.0, totalTicks * 0.30));
-        double outro = smootherStep((elapsedTicks - (totalTicks - outroDuration)) / outroDuration);
-        double opacity = Math.max(0.0, Math.min(1.0, intro * (1.0 - outro)));
-        if (opacity <= 0.005) return;
+        double outroStart = Math.max(0.0D, totalTicks - outroDuration);
+        double outro = smootherStep((elapsedTicks - outroStart) / outroDuration);
+        double opacity = Math.max(0.0D, Math.min(1.0D, intro * (1.0D - outro)));
+        if (opacity <= 0.002D) return;
 
-        // Use the exact same continuous world clock and formatter as Vertex's HUD.
         double visualTime = SkyAngleInterpolationState.getVisualTime(
                 client.world, client.world.getTime(), tickDelta);
         long timeOfDay = Math.floorMod((long) Math.floor(visualTime), 24000L);
         String timeText = VertexHudOverlay.formatMinecraftTime(timeOfDay);
-
         int centerX = screenWidth / 2;
-        // Fixed position relative to the bottom of the sleeping screen.
-        // This leaves a clear gap above the vanilla leave-bed button.
         int iconY = Math.max(4, screenHeight - 98);
-        double verticalOffset = (1.0 - intro) * 8.0 + outro * 4.0;
-        double iconSizeFactor = 0.92 + 0.08 * intro - 0.04 * outro;
-        float alpha = (float) opacity;
+        double verticalOffset = (1.0D - intro) * 14.0D + outro * 8.0D;
+        double sizeFactor = 0.88D + 0.12D * intro - 0.05D * outro;
 
-        // The real vanilla clock item keeps its normal animated clock face.
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
-        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, alpha);
+        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, (float) opacity);
         context.getMatrices().push();
-        context.getMatrices().translate(centerX, iconY + 16.0 + verticalOffset, 0.0);
-        context.getMatrices().scale(
-                (float) (CLOCK_SCALE * iconSizeFactor),
-                (float) (CLOCK_SCALE * iconSizeFactor),
-                1.0F);
-        context.getMatrices().translate(-8.0, -8.0, 0.0);
-        context.drawItem(new ItemStack(Items.CLOCK), 0, 0);
-        context.getMatrices().pop();
-        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+        try {
+            context.getMatrices().translate(centerX, iconY + 16.0D + verticalOffset, 0.0D);
+            context.getMatrices().scale((float) (CLOCK_SCALE * sizeFactor),
+                    (float) (CLOCK_SCALE * sizeFactor), 1.0F);
+            context.getMatrices().translate(-8.0D, -8.0D, 0.0D);
+            context.drawItem(new ItemStack(Items.CLOCK), 0, 0);
+        } finally {
+            context.getMatrices().pop();
+            RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+        }
 
-        // Text follows exactly the same fade-in, fade-out and movement as the clock.
-        int textAlpha = Math.max(0, Math.min(255, (int) Math.round(opacity * 255.0)));
-        int color = (textAlpha << 24) | 0x00FFFFFF;
-        int textY = (int) Math.round(iconY + 35.0 + verticalOffset);
-        context.drawCenteredTextWithShadow(
-                client.textRenderer, Text.literal(timeText), centerX, textY, color);
+        int alpha = Math.max(0, Math.min(255, (int) Math.round(opacity * 255.0D)));
+        int color = (alpha << 24) | 0x00FFFFFF;
+        int textY = (int) Math.round(iconY + 35.0D + verticalOffset);
+        context.drawCenteredTextWithShadow(client.textRenderer, Text.literal(timeText), centerX, textY, color);
     }
 
     private static double smootherStep(double value) {
-        if (Double.isNaN(value) || value <= 0.0) return 0.0;
-        if (value >= 1.0) return 1.0;
+        if (Double.isNaN(value) || value <= 0.0D) return 0.0D;
+        if (value >= 1.0D) return 1.0D;
         double x = value;
-        return x * x * x * (x * (x * 6.0 - 15.0) + 10.0);
+        return x * x * x * (x * (x * 6.0D - 15.0D) + 10.0D);
     }
 }
