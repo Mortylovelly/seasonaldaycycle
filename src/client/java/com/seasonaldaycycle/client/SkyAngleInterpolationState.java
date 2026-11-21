@@ -20,6 +20,7 @@ public final class SkyAngleInterpolationState {
     private static final int SEASON_REFRESH_TICKS = 20;
     private static final int CORRECTION_TICKS = 80;
     private static final int SPEED_TRANSITION_TICKS = 40;
+    private static final int SLEEP_RESUME_TRANSITION_TICKS = 28;
     private static final long MAX_CATCH_UP_TICKS = 2400L;
     private static final Map<LunarWorldView, State> STATES = new WeakHashMap<>();
 
@@ -99,6 +100,9 @@ public final class SkyAngleInterpolationState {
         state.transitionStartSpeed = initialSpeed;
         state.targetSpeed = initialSpeed;
         state.speedTransitionElapsed = SPEED_TRANSITION_TICKS;
+        state.speedTransitionDurationTicks = SPEED_TRANSITION_TICKS;
+        state.sleepResumeTransition = false;
+        state.sleepNaturalReleasePending = false;
     }
 
     private static void synchronizeDuringSleep(State state, World world, double sleepTime, long clientTick) {
@@ -136,11 +140,18 @@ public final class SkyAngleInterpolationState {
         state.subSeason = readSubSeason(world);
         state.correctionRemaining = 0.0;
         state.sleepAnimationWasActive = true;
+        state.sleepNaturalReleasePending = true;
     }
 
     private static void resumeAfterSleepIfNeeded(State state) {
         if (!state.sleepAnimationWasActive) return;
         state.sleepAnimationWasActive = false;
+        boolean naturalRelease = state.sleepNaturalReleasePending;
+        state.sleepNaturalReleasePending = false;
+        state.sleepResumeTransition = naturalRelease;
+        state.speedTransitionDurationTicks = naturalRelease
+                ? SLEEP_RESUME_TRANSITION_TICKS
+                : SPEED_TRANSITION_TICKS;
 
         double target = getPhaseSpeed(state.visualTime, state.subSeason,
                 SeasonalDayCycleClient.getKnownCycleLengthTicks());
@@ -209,6 +220,8 @@ public final class SkyAngleInterpolationState {
             state.transitionStartSpeed = targetSpeed;
             state.targetSpeed = targetSpeed;
             state.speedTransitionElapsed = SPEED_TRANSITION_TICKS;
+            state.speedTransitionDurationTicks = SPEED_TRANSITION_TICKS;
+            state.sleepResumeTransition = false;
             return;
         }
 
@@ -219,14 +232,22 @@ public final class SkyAngleInterpolationState {
             state.transitionStartSpeed = state.currentSpeed;
             state.targetSpeed = targetSpeed;
             state.speedTransitionElapsed = 0;
+            if (!state.sleepResumeTransition) {
+                state.speedTransitionDurationTicks = SPEED_TRANSITION_TICKS;
+            }
         }
 
-        if (state.speedTransitionElapsed < SPEED_TRANSITION_TICKS) {
+        int transitionTicks = Math.max(1, state.speedTransitionDurationTicks);
+        if (state.speedTransitionElapsed < transitionTicks) {
             state.speedTransitionElapsed++;
-            double progress = state.speedTransitionElapsed / (double) SPEED_TRANSITION_TICKS;
+            double progress = state.speedTransitionElapsed / (double) transitionTicks;
             double eased = smootherStep(progress);
             state.currentSpeed = state.transitionStartSpeed
                     + (state.targetSpeed - state.transitionStartSpeed) * eased;
+            if (state.speedTransitionElapsed >= transitionTicks && state.sleepResumeTransition) {
+                state.sleepResumeTransition = false;
+                state.speedTransitionDurationTicks = SPEED_TRANSITION_TICKS;
+            }
         } else {
             state.currentSpeed = state.targetSpeed;
         }
@@ -291,6 +312,9 @@ public final class SkyAngleInterpolationState {
         private double transitionStartSpeed;
         private double targetSpeed;
         private int speedTransitionElapsed;
+        private int speedTransitionDurationTicks = SPEED_TRANSITION_TICKS;
         private boolean sleepAnimationWasActive;
+        private boolean sleepNaturalReleasePending;
+        private boolean sleepResumeTransition;
     }
 }
