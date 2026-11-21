@@ -27,6 +27,11 @@ public final class DayCycleCommand {
             return 0;
         }
 
+        if (!ServerPlayNetworking.canSend(player, OpenDayCycleScreenPayload.TYPE)) {
+            source.sendError(Text.literal("[Vertex] Установите мод Vertex на клиент, чтобы открыть меню."));
+            return 0;
+        }
+
         ServerPlayNetworking.send(player, new OpenDayCycleScreenPayload());
         return 1;
     }
