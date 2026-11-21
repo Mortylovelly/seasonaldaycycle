@@ -8,13 +8,10 @@ import net.minecraft.item.Items;
 import net.minecraft.text.Text;
 import net.minecraft.world.World;
 
-import java.util.Locale;
-
 /** A vanilla clock and live Minecraft time drawn over the actual sleeping screen. */
 public final class SleepClockHudOverlay {
     private static final int CLOCK_SCALE = 2;
     private static final int INTRO_TICKS = 12;
-    private static final int TEXT_DELAY_TICKS = 3;
     private static final int MAX_OUTRO_TICKS = 24;
 
     private SleepClockHudOverlay() {
@@ -44,14 +41,11 @@ public final class SleepClockHudOverlay {
         double opacity = Math.max(0.0, Math.min(1.0, intro * (1.0 - outro)));
         if (opacity <= 0.005) return;
 
-        double textIntro = smootherStep((elapsedTicks - TEXT_DELAY_TICKS)
-                / Math.max(1.0, introDuration - TEXT_DELAY_TICKS));
-        double textOpacity = opacity * textIntro;
-
+        // Use the exact same continuous world clock and formatter as Vertex's HUD.
         double visualTime = SkyAngleInterpolationState.getVisualTime(
                 client.world, client.world.getTime(), tickDelta);
         long timeOfDay = Math.floorMod((long) Math.floor(visualTime), 24000L);
-        String timeText = formatMinecraftTime(timeOfDay);
+        String timeText = VertexHudOverlay.formatMinecraftTime(timeOfDay);
 
         int centerX = screenWidth / 2;
         int iconY = Math.max(4, Math.min(screenHeight - 48, stopButtonTopY - 58));
@@ -74,20 +68,12 @@ public final class SleepClockHudOverlay {
         context.getMatrices().pop();
         RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
 
-        if (textOpacity > 0.005) {
-            int textAlpha = Math.max(0, Math.min(255, (int) Math.round(textOpacity * 255.0)));
-            int color = (textAlpha << 24) | 0x00FFFFFF;
-            int textY = (int) Math.round(iconY + 35.0 + verticalOffset);
-            context.drawCenteredTextWithShadow(
-                    client.textRenderer, Text.literal(timeText), centerX, textY, color);
-        }
-    }
-
-    private static String formatMinecraftTime(long ticks) {
-        long shifted = Math.floorMod(ticks + 6000L, 24000L);
-        long hours = shifted / 1000L;
-        long minutes = (shifted % 1000L) * 60L / 1000L;
-        return String.format(Locale.ROOT, "%02d:%02d", hours, minutes);
+        // Text follows exactly the same fade-in, fade-out and movement as the clock.
+        int textAlpha = Math.max(0, Math.min(255, (int) Math.round(opacity * 255.0)));
+        int color = (textAlpha << 24) | 0x00FFFFFF;
+        int textY = (int) Math.round(iconY + 35.0 + verticalOffset);
+        context.drawCenteredTextWithShadow(
+                client.textRenderer, Text.literal(timeText), centerX, textY, color);
     }
 
     private static double smootherStep(double value) {
