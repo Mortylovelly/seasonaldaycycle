@@ -42,20 +42,29 @@ public final class DayCycleHandler {
         if (state.sleepAnimationWasActive) {
             state.sleepAnimationWasActive = false;
             state.timeDecimalAccumulator = 0.0;
-            state.lastKnownTime = currentTime;
 
-            // The sleep curve finishes with exactly the configured normal speed.
-            // Synchronize our controller to that velocity instead of restarting
-            // from a near-zero speed and making the sun appear to pause.
+            // Seamless Sleep suppresses vanilla's daylight tick while its animation
+            // is active. On this handoff tick there is therefore no vanilla +1 to
+            // cancel: continue from the exact final sleep time without subtracting
+            // a tick, which previously caused a tiny backwards snap on wake-up.
             double resumeSpeed = getTargetSpeed(currentTime, state.cachedSubSeason,
                     DayCycleWorldConfig.getCycleLengthTicks(level));
-            state.currentSpeed = resumeSpeed;
-            state.transitionStartSpeed = resumeSpeed;
-            state.targetSpeed = resumeSpeed;
+            state.currentSpeed = Math.max(1.0E-9, resumeSpeed);
+            state.transitionStartSpeed = state.currentSpeed;
+            state.targetSpeed = state.currentSpeed;
             state.speedTransitionElapsed = SPEED_TRANSITION_TICKS;
             state.speedTransitionDurationTicks = SPEED_TRANSITION_TICKS;
             state.speedInitialized = true;
             state.forceSpeedTransition = false;
+
+            state.timeDecimalAccumulator += state.currentSpeed;
+            long toAdd = (long) Math.floor(state.timeDecimalAccumulator);
+            state.timeDecimalAccumulator -= toAdd;
+            long resumedTime = currentTime + toAdd;
+            if (resumedTime < 0L) resumedTime = Math.floorMod(resumedTime, VANILLA_CYCLE);
+            level.setTimeOfDay(resumedTime);
+            state.lastKnownTime = resumedTime;
+            return;
         }
 
         double targetSpeed = getTargetSpeed(currentTime, state.cachedSubSeason,
