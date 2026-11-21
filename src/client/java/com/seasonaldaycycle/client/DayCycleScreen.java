@@ -317,7 +317,9 @@ public final class DayCycleScreen {
 
     private void commitSleepDuration() {
         sleepDurationPreview = SeamlessSleepCompat.clampMultiplier(sleepDurationPreview);
-        if (MinecraftClient.getInstance().getNetworkHandler() != null && serverCanEditSleepDuration) {
+        if (MinecraftClient.getInstance().getNetworkHandler() != null
+                && serverCanEditSleepDuration
+                && ClientPlayNetworking.canSend(SetSleepDurationPayload.TYPE)) {
             ClientPlayNetworking.send(new SetSleepDurationPayload(sleepDurationPreview));
         }
     }
@@ -809,9 +811,13 @@ public final class DayCycleScreen {
                         } else if (!serverCanEdit) {
                             seasonActionMessage = "Нужны права оператора (OP 2)";
                             seasonActionUntil = System.currentTimeMillis() + 1800L;
-                        } else if (MinecraftClient.getInstance().getNetworkHandler() != null) {
+                        } else if (MinecraftClient.getInstance().getNetworkHandler() != null
+                                && ClientPlayNetworking.canSend(SetSeasonPayload.TYPE)) {
                             ClientPlayNetworking.send(new SetSeasonPayload(i));
                             seasonActionMessage = "Запрос смены сезона отправлен";
+                            seasonActionUntil = System.currentTimeMillis() + 1800L;
+                        } else {
+                            seasonActionMessage = "Сервер не поддерживает Vertex";
                             seasonActionUntil = System.currentTimeMillis() + 1800L;
                         }
                         playUiSound(1.05f);
@@ -990,10 +996,14 @@ public final class DayCycleScreen {
         cycleLengthTicks = ModConfig.sanitizeCycleLengthTicks(cycleLengthTicks);
         ModConfig.setCycleLengthTicks(cycleLengthTicks);
         MinecraftClient client = MinecraftClient.getInstance();
-        if (client.getNetworkHandler() != null) {
+        if (client.getNetworkHandler() != null
+                && serverCanEdit
+                && ClientPlayNetworking.canSend(SetDayCycleLengthPayload.TYPE)) {
             ClientPlayNetworking.send(new SetDayCycleLengthPayload((int) cycleLengthTicks));
+            savedUntil = System.currentTimeMillis() + 900L;
+        } else {
+            savedUntil = 0L;
         }
-        savedUntil = System.currentTimeMillis() + 900L;
     }
 
     public void setCycleLengthFromServer(long ticks, boolean canEdit) {
