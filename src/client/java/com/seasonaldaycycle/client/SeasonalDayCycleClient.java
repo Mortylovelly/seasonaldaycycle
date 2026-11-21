@@ -1,6 +1,7 @@
 package com.seasonaldaycycle.client;
 
 import com.seasonaldaycycle.ModConfig;
+import com.seasonaldaycycle.mixin.SleepingChatScreenAccessor;
 import com.seasonaldaycycle.network.DayCycleLengthSyncPayload;
 import com.seasonaldaycycle.network.OpenDayCycleScreenPayload;
 import com.seasonaldaycycle.network.SleepSettingsSyncPayload;
@@ -9,16 +10,52 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.client.gui.screen.SleepingChatScreen;
+import net.minecraft.client.gui.widget.ButtonWidget;
+
+import java.util.Collections;
+import java.util.Set;
+import java.util.WeakHashMap;
 
 public final class SeasonalDayCycleClient implements ClientModInitializer {
     private static long knownCycleLengthTicks = ModConfig.DEFAULT_CYCLE_LENGTH_TICKS;
+    private static final Set<Screen> SLEEP_OVERLAY_SCREENS =
+            Collections.newSetFromMap(new WeakHashMap<>());
 
     @Override
     public void onInitializeClient() {
         VertexHudConfig.load();
         VertexUiConfig.load();
         VertexKeyBindings.register();
+
+        // Use Fabric's supported per-screen render event instead of injecting
+        // into a Minecraft screen method. This runs after the sleeping screen,
+        // so the clock and time label are drawn above its widgets.
+        ScreenEvents.BEFORE_INIT.register((client, screen, scaledWidth, scaledHeight) -> {
+            if (screen instanceof SleepingChatScreen && SLEEP_OVERLAY_SCREENS.add(screen)) {
+                ScreenEvents.afterRender(screen).register(
+                        (renderedScreen, drawContext, mouseX, mouseY, tickDelta) -> {
+                            if (!(renderedScreen instanceof SleepingChatScreen sleepingScreen)) return;
+                            if (client.player == null || client.world == null) return;
+
+                            ButtonWidget stopButton =
+                                    ((SleepingChatScreenAccessor) (Object) sleepingScreen)
+                                            .seasonaldaycycle$getStopSleepingButton();
+                            int width = client.getWindow().getScaledWidth();
+                            int height = client.getWindow().getScaledHeight();
+                            int buttonTop = stopButton == null ? height - 40 : stopButton.getY();
+
+                            SleepClockHudOverlay.render(
+                                    drawContext, width, height, tickDelta, buttonTop);
+                        });
+
+                ScreenEvents.remove(screen).register(
+                        removedScreen -> SLEEP_OVERLAY_SCREENS.remove(removedScreen));
+            }
+        });
 
         // Register the compatibility bridge on the first tick, after all client
         // initializers have run. This removes dependence on mod initializer order.
@@ -63,7 +100,6 @@ public final class SeasonalDayCycleClient implements ClientModInitializer {
             } else {
                 VertexHudOverlay.render(drawContext, width, height, tickDelta);
             }
-
         });
     }
 
