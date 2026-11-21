@@ -37,22 +37,37 @@ public final class SkyAngleInterpolationState {
     }
 
     /**
-     * Applies the server's persistent day offset. On the initial join sync, already
-     * initialized client clocks are rebased once; later updates leave their live
-     * timeline untouched so /time set cannot double-count the offset.
+     * Applies the server-authoritative calendar offset and anchors the active client
+     * clock to the exact absolute calendar time. This avoids phase-only corrections
+     * from accidentally shifting the HUD across a day boundary after /time set.
      */
-    public static synchronized void setServerDayOffsetDays(long offsetDays, boolean initialSync) {
+    public static synchronized void setServerCalendarState(
+            long offsetDays, long calendarTime, long clientTick, LunarWorldView lunarWorld) {
         long safeDays = Math.max(-1_000_000_000_000L,
                 Math.min(1_000_000_000_000L, offsetDays));
-        double nextOffset = safeDays * DAY_LENGTH;
-        double difference = nextOffset - serverDayOffsetTicks;
-        serverDayOffsetTicks = nextOffset;
+        serverDayOffsetTicks = safeDays * DAY_LENGTH;
 
-        if (initialSync && difference != 0.0D) {
-            for (State state : STATES.values()) {
-                if (state.initialized) state.visualTime += difference;
-            }
-        }
+        if (!(lunarWorld instanceof World world) || !world.isClient()) return;
+
+        State state = get(lunarWorld);
+        state.initialized = true;
+        state.visualTime = calendarTime;
+        state.lastClientTick = clientTick;
+        state.lastSeasonRefresh = clientTick;
+        state.subSeason = readSubSeason(world);
+        state.correctionRemaining = 0.0D;
+        state.sleepAnimationWasActive = false;
+        state.sleepNaturalReleasePending = false;
+
+        double speed = getPhaseSpeed(calendarTime, state.subSeason,
+                SeasonalDayCycleClient.getKnownCycleLengthTicks());
+        state.speedInitialized = true;
+        state.currentSpeed = Math.max(1.0E-9D, speed);
+        state.transitionStartSpeed = state.currentSpeed;
+        state.targetSpeed = state.currentSpeed;
+        state.speedTransitionElapsed = SPEED_TRANSITION_TICKS;
+        state.speedTransitionDurationTicks = SPEED_TRANSITION_TICKS;
+        state.sleepResumeTransition = false;
     }
 
     public static synchronized void acceptServerTime(LunarWorldView lunarWorld, long serverTime, long clientTick) {
