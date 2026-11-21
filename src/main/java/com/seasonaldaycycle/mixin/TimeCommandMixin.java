@@ -17,6 +17,9 @@ public abstract class TimeCommandMixin {
     @Unique
     private static final ThreadLocal<Long> VERTEX_TIME_BEFORE_SET = new ThreadLocal<>();
 
+    @Unique
+    private static final ThreadLocal<Long> VERTEX_TIME_BEFORE_ADD = new ThreadLocal<>();
+
     @Inject(method = "executeSet", at = @At("HEAD"))
     private static void vertex$captureTimeBeforeSet(
             ServerCommandSource source, int time, CallbackInfoReturnable<Integer> cir) {
@@ -35,5 +38,25 @@ public abstract class TimeCommandMixin {
         if (previousTime == null || source == null) return;
 
         DayCycleHandler.onTimeSetCommand(source.getWorld(), previousTime);
+    }
+
+    @Inject(method = "executeAdd", at = @At("HEAD"))
+    private static void vertex$captureTimeBeforeAdd(
+            ServerCommandSource source, int time, CallbackInfoReturnable<Integer> cir) {
+        if (source == null) return;
+        ServerWorld world = source.getWorld();
+        if (world.getRegistryKey() == World.OVERWORLD) {
+            VERTEX_TIME_BEFORE_ADD.set(world.getTimeOfDay());
+        }
+    }
+
+    @Inject(method = "executeAdd", at = @At("TAIL"))
+    private static void vertex$acceptTimeAddition(
+            ServerCommandSource source, int time, CallbackInfoReturnable<Integer> cir) {
+        Long previousTime = VERTEX_TIME_BEFORE_ADD.get();
+        VERTEX_TIME_BEFORE_ADD.remove();
+        if (previousTime == null || source == null) return;
+
+        DayCycleHandler.onTimeAddCommand(source.getWorld());
     }
 }
