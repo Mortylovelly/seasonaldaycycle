@@ -64,6 +64,13 @@ public final class SkyAngleInterpolationState {
         }
     }
 
+    /** Returns the configured normal world-time speed at an explicit time of day. */
+    public static synchronized double getConfiguredSpeed(LunarWorldView lunarWorld, long timeOfDay) {
+        if (!(lunarWorld instanceof World world) || !world.isClient()) return 1.0D;
+        String subSeason = readSubSeason(world);
+        return getPhaseSpeed(timeOfDay, subSeason, SeasonalDayCycleClient.getKnownCycleLengthTicks());
+    }
+
     public static synchronized double getVisualTime(LunarWorldView lunarWorld, long clientTick, float tickDelta) {
         State state = get(lunarWorld);
         if (!(lunarWorld instanceof World world) || !world.isClient()) {
@@ -146,22 +153,19 @@ public final class SkyAngleInterpolationState {
     private static void resumeAfterSleepIfNeeded(State state) {
         if (!state.sleepAnimationWasActive) return;
         state.sleepAnimationWasActive = false;
-        boolean naturalRelease = state.sleepNaturalReleasePending;
         state.sleepNaturalReleasePending = false;
-        state.sleepResumeTransition = naturalRelease;
-        state.speedTransitionDurationTicks = naturalRelease
-                ? SLEEP_RESUME_TRANSITION_TICKS
-                : SPEED_TRANSITION_TICKS;
 
+        // The sleep curve already reaches the configured normal velocity exactly.
+        // Continue with that same velocity instead of restarting from near zero.
         double target = getPhaseSpeed(state.visualTime, state.subSeason,
                 SeasonalDayCycleClient.getKnownCycleLengthTicks());
-        // Seamless Sleep eases to a stop at the end of its transition. Resume our
-        // normal day cycle from a very low speed, then smoothly accelerate again.
-        state.currentSpeed = Math.max(1.0E-9, Math.min(state.currentSpeed, target) * 0.01);
+        state.currentSpeed = Math.max(1.0E-9, target);
         state.transitionStartSpeed = state.currentSpeed;
-        state.targetSpeed = target;
-        state.speedTransitionElapsed = 0;
+        state.targetSpeed = state.currentSpeed;
+        state.speedTransitionElapsed = SPEED_TRANSITION_TICKS;
+        state.speedTransitionDurationTicks = SPEED_TRANSITION_TICKS;
         state.speedInitialized = true;
+        state.sleepResumeTransition = false;
     }
 
     private static void refreshSeason(State state, World world, long clientTick) {
