@@ -75,7 +75,9 @@ public final class DayCycleNetworking {
         CalendarProgressSyncPayload payload =
                 new CalendarProgressSyncPayload(safeOffset, calendarTime);
         for (ServerPlayerEntity player : world.getServer().getPlayerManager().getPlayerList()) {
-            ServerPlayNetworking.send(player, payload);
+            if (ServerPlayNetworking.canSend(player, CalendarProgressSyncPayload.TYPE)) {
+                ServerPlayNetworking.send(player, payload);
+            }
         }
     }
 
@@ -85,7 +87,9 @@ public final class DayCycleNetworking {
         if (overworld == null) return;
         long offset = DayCycleWorldConfig.getElapsedDayOffsetDays(overworld);
         long calendarTime = overworld.getTimeOfDay() + offset * 24000L;
-        ServerPlayNetworking.send(player, new CalendarProgressSyncPayload(offset, calendarTime));
+        if (ServerPlayNetworking.canSend(player, CalendarProgressSyncPayload.TYPE)) {
+            ServerPlayNetworking.send(player, new CalendarProgressSyncPayload(offset, calendarTime));
+        }
     }
 
     private static boolean canEdit(ServerPlayerEntity player) {
@@ -96,14 +100,16 @@ public final class DayCycleNetworking {
     private static void sendState(ServerPlayerEntity player) {
         ServerWorld overworld = player.getServer() == null ? null : player.getServer().getOverworld();
         if (overworld == null) return;
-        ServerPlayNetworking.send(player, new DayCycleLengthSyncPayload(
-                (int) DayCycleWorldConfig.getCycleLengthTicks(overworld),
-                canEdit(player),
-                (float) ModConfig.getSpringDayRatio(),
-                (float) ModConfig.getSummerDayRatio(),
-                (float) ModConfig.getAutumnDayRatio(),
-                (float) ModConfig.getWinterDayRatio()
-        ));
+        if (ServerPlayNetworking.canSend(player, DayCycleLengthSyncPayload.TYPE)) {
+            ServerPlayNetworking.send(player, new DayCycleLengthSyncPayload(
+                    (int) DayCycleWorldConfig.getCycleLengthTicks(overworld),
+                    canEdit(player),
+                    (float) ModConfig.getSpringDayRatio(),
+                    (float) ModConfig.getSummerDayRatio(),
+                    (float) ModConfig.getAutumnDayRatio(),
+                    (float) ModConfig.getWinterDayRatio()
+            ));
+        }
         sendSleepSettingsState(player);
     }
 
@@ -116,7 +122,9 @@ public final class DayCycleNetworking {
         boolean available = SeamlessSleepCompat.isLoaded();
         float multiplier = available ? SeamlessSleepCompat.getSleepAnimationDurationMultiplier() : 1.0f;
         boolean canEdit = available && canEditSleepSettings(player);
-        ServerPlayNetworking.send(player, new SleepSettingsSyncPayload(available, multiplier, canEdit));
+        if (ServerPlayNetworking.canSend(player, SleepSettingsSyncPayload.TYPE)) {
+            ServerPlayNetworking.send(player, new SleepSettingsSyncPayload(available, multiplier, canEdit));
+        }
     }
 
     private static void syncSleepSettingsState(MinecraftServer server) {
