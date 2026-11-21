@@ -4,6 +4,7 @@ import com.seasonaldaycycle.network.DayCycleNetworking;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -16,6 +17,10 @@ public class SeasonalDayCycle implements ModInitializer {
         ModConfig.load();
         DayCycleNetworking.init();
         ServerTickEvents.END_WORLD_TICK.register(DayCycleHandler::onWorldTick);
+        ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
+            DayCycleHandler.clearAll();
+            DayCycleWorldConfig.clearAll();
+        });
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
                 DayCycleCommand.register(dispatcher));
 
