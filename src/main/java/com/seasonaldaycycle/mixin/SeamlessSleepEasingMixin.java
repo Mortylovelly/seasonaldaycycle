@@ -1,5 +1,6 @@
 package com.seasonaldaycycle.mixin;
 
+import com.seasonaldaycycle.DayCycleHandler;
 import net.minecraft.server.world.ServerWorld;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
@@ -11,15 +12,14 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * Gives Seamless Sleep a symmetric smooth start and a dedicated wake-up settling phase.
- * The last 40 ticks are reserved for Vertex to restore the normal day-cycle speed
- * while players remain in bed.
+ * Controls Seamless Sleep's server clock with a continuous curve whose final
+ * velocity equals Vertex's configured normal day-cycle speed.
  */
 @Pseudo
 @Mixin(targets = "net.aqualoco.sec.sleep.SleepAnimationState", remap = false)
 public abstract class SeamlessSleepEasingMixin {
     @Unique
-    private static final int VERTEX_WAKE_SETTLE_TICKS = 40;
+    private static final int VERTEX_REST_TICKS = 40;
 
     @Shadow(remap = false)
     private boolean active;
@@ -37,70 +37,84 @@ public abstract class SeamlessSleepEasingMixin {
     private long startMillis;
 
     @Unique
-    private boolean vertex$releaseStarted;
+    private int vertex$skipDurationTicks;
 
     @Inject(method = "start", at = @At("TAIL"), remap = false)
-    private void vertex$appendWakeSettleTime(long currentTime, long targetTime, CallbackInfo ci) {
-        if (this.active) {
-            this.durationTicks = Math.max(1, this.durationTicks) + VERTEX_WAKE_SETTLE_TICKS;
-        }
-        this.vertex$releaseStarted = false;
-    }
-
-    /**
-     * @author Mortylovelly
-     * @reason Keep the world at the exact sunrise while Vertex smoothly restores its
-     * configured day speed; Seamless Sleep wakes players only after this settling window.
-     */
-    @Overwrite(remap = false)
-    public void tick(ServerWorld world) {
+    private void vertex$appendNaturalRest(long currentTime, long targetTime, CallbackInfo ci) {
+        this.vertex$skipDurationTicks = 0;
         if (!this.active) return;
 
-        long now = System.currentTimeMillis();
-        double elapsedMs = (double) (now - this.startMillis);
-        if (elapsedMs <= 0.0D) {
-            world.setTimeOfDay(this.startTimeOfDay);
-            return;
+        // Preserve Seamless Sleep's configured transition duration. The extra
+        // 2 seconds are a quiet resting period after normal speed is reached.
+        this.vertex$skipDurationTicks = Math.max(1, this.durationTicks);
+        this.durationTicks = this.vertex$skipDurationTicks + VERTEX_REST_TICKS;
+    }
+
+    @Inject(method = "tick", at = @At("HEAD"), cancellable = true, remap = false)
+    private void vertex$driveContinuousSleepCurve(ServerWorld world, CallbackInfo ci) {
+        if (!this.active) return;
+
+        int skipTicks = Math.max(1, this.vertex$skipDurationTicks);
+        int totalTicks = skipTicks + VERTEX_REST_TICKS;
+        long skipMillis = skipTicks * 50L;
+        long totalMillis = totalTicks * 50L;
+        long elapsedMillis = Math.max(0L, System.currentTimeMillis() - this.startMillis);
+
+        double normalSpeed = DayCycleHandler.getConfiguredSpeed(world, this.endTimeOfDay);
+        long skippedTime = Math.max(1L, this.endTimeOfDay - this.startTimeOfDay);
+        double endSlope = Math.max(0.0D, Math.min(2.0D,
+                normalSpeed * skipTicks / skippedTime));
+
+        if (elapsedMillis < skipMillis) {
+            double progress = elapsedMillis / (double) skipMillis;
+            double eased = smootherStepWithEndVelocity(progress, endSlope);
+            long interpolated = this.startTimeOfDay
+                    + Math.round((this.endTimeOfDay - this.startTimeOfDay) * eased);
+            world.setTimeOfDay(interpolated);
+        } else {
+            // The transition has already reached sunrise at normal velocity.
+            // Keep that exact velocity during the short final lying-down pause.
+            double restElapsedTicks = Math.min(
+                    VERTEX_REST_TICKS,
+                    Math.max(0.0D, (elapsedMillis - skipMillis) / 50.0D));
+            long normalAdvance = Math.max(0L, (long) Math.floor(restElapsedTicks * normalSpeed));
+            world.setTimeOfDay(this.endTimeOfDay + normalAdvance);
         }
 
-        int totalTicks = Math.max(1, this.durationTicks);
-        int skipTicks = Math.max(1, totalTicks - VERTEX_WAKE_SETTLE_TICKS);
-        double skipDurationMs = skipTicks * 50.0D;
-        double totalDurationMs = totalTicks * 50.0D;
-
-        if (elapsedMs >= totalDurationMs) {
-            if (!this.vertex$releaseStarted) {
-                world.setTimeOfDay(this.endTimeOfDay);
-                this.vertex$releaseStarted = true;
-            }
+        if (elapsedMillis >= totalMillis) {
+            long finalAdvance = Math.max(0L, (long) Math.floor(VERTEX_REST_TICKS * normalSpeed));
+            world.setTimeOfDay(this.endTimeOfDay + finalAdvance);
             this.active = false;
-            return;
         }
 
-        if (elapsedMs >= skipDurationMs) {
-            if (!this.vertex$releaseStarted) {
-                world.setTimeOfDay(this.endTimeOfDay);
-                this.vertex$releaseStarted = true;
-            }
-            // The sleep animation remains active, but Vertex now owns the clock.
-            return;
-        }
-
-        double progress = Math.max(0.0D, Math.min(1.0D, elapsedMs / skipDurationMs));
-        double eased = smootherStep(progress);
-        long delta = this.endTimeOfDay - this.startTimeOfDay;
-        long interpolated = this.startTimeOfDay + (long) (delta * eased);
-        world.setTimeOfDay(interpolated);
+        // Seamless Sleep's own ServerWorld mixin still owns the wake-up event.
+        // It will wake players only after this extended active period finishes.
+        ci.cancel();
     }
 
     /**
      * @author Mortylovelly
-     * @reason Use a quintic ease-in/ease-out curve with zero velocity and acceleration
-     * at both ends of the night-skip transition.
+     * @reason Keep the standard smooth ease-in curve for other Seamless Sleep callers.
      */
     @Overwrite(remap = false)
     public static double integralEase(double progress) {
         return smootherStep(progress);
+    }
+
+    @Unique
+    private static double smootherStepWithEndVelocity(double value, double endVelocity) {
+        if (Double.isNaN(value) || value <= 0.0D) return 0.0D;
+        if (value >= 1.0D) return 1.0D;
+
+        double x = value;
+        double m = Math.max(0.0D, Math.min(2.0D, endVelocity));
+        double x2 = x * x;
+        double x3 = x2 * x;
+        double x4 = x3 * x;
+        double x5 = x4 * x;
+        return x3 * (10.0D - 4.0D * m)
+                + x4 * (7.0D * m - 15.0D)
+                + x5 * (6.0D - 3.0D * m);
     }
 
     @Unique
