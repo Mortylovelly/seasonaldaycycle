@@ -2,6 +2,7 @@ package com.seasonaldaycycle.client;
 
 import com.seasonaldaycycle.ModConfig;
 import com.seasonaldaycycle.network.DayCycleLengthSyncPayload;
+import com.seasonaldaycycle.network.CalendarProgressSyncPayload;
 import com.seasonaldaycycle.network.OpenDayCycleScreenPayload;
 import com.seasonaldaycycle.network.SleepSettingsSyncPayload;
 import net.fabricmc.api.ClientModInitializer;
@@ -76,6 +77,11 @@ public final class SeasonalDayCycleClient implements ClientModInitializer {
                 MinecraftClient.getInstance().execute(() ->
                         DayCycleScreen.updateSleepSettingsFromServer(
                                 payload.available(), payload.multiplier(), payload.canEdit())));
+
+        ClientPlayNetworking.registerGlobalReceiver(CalendarProgressSyncPayload.TYPE, (payload, player, responseSender) ->
+                MinecraftClient.getInstance().execute(() ->
+                        SkyAngleInterpolationState.setServerDayOffsetDays(
+                                payload.dayOffsetDays(), payload.initialSync())));
 
         ClientPlayNetworking.registerGlobalReceiver(OpenDayCycleScreenPayload.TYPE, (payload, player, responseSender) ->
                 VertexPanelController.openMain(MinecraftClient.getInstance()));
