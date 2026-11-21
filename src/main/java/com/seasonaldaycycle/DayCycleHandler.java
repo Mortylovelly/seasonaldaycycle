@@ -1,6 +1,7 @@
 package com.seasonaldaycycle;
 
 import net.minecraft.server.world.ServerWorld;
+import com.seasonaldaycycle.network.DayCycleNetworking;
 import net.minecraft.world.GameRules;
 import net.minecraft.world.World;
 
@@ -20,7 +21,7 @@ public final class DayCycleHandler {
         if (level.getRegistryKey() != World.OVERWORLD) return;
         if (!level.getGameRules().getBoolean(GameRules.DO_DAYLIGHT_CYCLE)) return;
 
-        State state = STATES.computeIfAbsent(level, ignored -> new State());
+        State state = getState(level);
         long currentTime = level.getTimeOfDay();
 
         if (!state.seasonInitialized || ++state.seasonRefreshTicks >= 20) {
@@ -70,16 +71,15 @@ public final class DayCycleHandler {
         double targetSpeed = getTargetSpeed(currentTime, state.cachedSubSeason,
                 DayCycleWorldConfig.getCycleLengthTicks(level));
 
-        // Don't mistake a naturally fast cycle (down to one real second) for /time set.
-        // Compare the observed advance with the speed we actually applied last tick.
+        // Compare signed world-time movement against the exact speed used on the
+        // previous tick. This remains reliable even for very fast configured cycles
+        // and detects large forward or backward changes made by commands or plugins.
         if (state.lastKnownTime >= 0L && state.speedInitialized) {
-            long observedAdvance = Math.abs(currentTime - state.lastKnownTime);
-            long expectedAdvance = Math.max(1L, Math.round(state.currentSpeed) + 1L);
-            long deviation = Math.abs(observedAdvance - expectedAdvance);
-            if (observedAdvance > EXTERNAL_CHANGE_THRESHOLD
-                    && observedAdvance < VANILLA_CYCLE - EXTERNAL_CHANGE_THRESHOLD
-                    && deviation > EXTERNAL_CHANGE_THRESHOLD) {
-                state.timeDecimalAccumulator = 0.0;
+            double observedAdvance = (double) currentTime - (double) state.lastKnownTime;
+            double expectedAdvance = Math.max(1.0D, Math.round(state.currentSpeed) + 1.0D);
+            if (Math.abs(observedAdvance - expectedAdvance) > EXTERNAL_CHANGE_THRESHOLD) {
+                preserveCalendarProgress(level, state, state.lastKnownTime, currentTime);
+                state.timeDecimalAccumulator = 0.0D;
                 state.lastKnownTime = currentTime;
                 return;
             }
@@ -100,6 +100,54 @@ public final class DayCycleHandler {
 
         level.setTimeOfDay(newTime);
         state.lastKnownTime = newTime;
+    }
+
+    private static State getState(ServerWorld level) {
+        return STATES.computeIfAbsent(level,
+                ignored -> new State(DayCycleWorldConfig.getElapsedDayOffsetDays(level)));
+    }
+
+    /**
+     * Called immediately after vanilla /time set changes the clock. The command changes
+     * time-of-day, not Vertex's elapsed-calendar progress, so preserve the day number.
+     */
+    public static void onTimeSetCommand(ServerWorld level, long timeBeforeCommand) {
+        if (level == null || level.getRegistryKey() != World.OVERWORLD) return;
+
+        State state = getState(level);
+        long currentTime = level.getTimeOfDay();
+        preserveCalendarProgress(level, state, timeBeforeCommand, currentTime);
+        state.timeDecimalAccumulator = 0.0D;
+        state.lastKnownTime = currentTime;
+    }
+
+    /** Authoritative elapsed-day counter, including the saved offset after /time set. */
+    public static long getElapsedDays(ServerWorld level) {
+        if (level == null) return 0L;
+        long rawDays = Math.floorDiv(level.getTimeOfDay(), VANILLA_CYCLE);
+        long offset = DayCycleWorldConfig.getElapsedDayOffsetDays(level);
+        return Math.max(0L, rawDays + offset);
+    }
+
+    private static void preserveCalendarProgress(
+            ServerWorld level, State state, long previousTime, long currentTime) {
+        long previousElapsedDays = Math.floorDiv(previousTime, VANILLA_CYCLE) + state.dayOffsetDays;
+        long currentRawDays = Math.floorDiv(currentTime, VANILLA_CYCLE);
+        long newOffset = DayCycleWorldConfig.sanitizeElapsedDayOffsetDays(
+                previousElapsedDays - currentRawDays);
+
+        if (newOffset == state.dayOffsetDays) return;
+
+        state.dayOffsetDays = newOffset;
+        DayCycleWorldConfig.setElapsedDayOffsetDays(level, newOffset);
+        DayCycleNetworking.syncDayOffset(level, newOffset);
+        SeasonalDayCycle.LOGGER.info(
+                "[Vertex] Preserved elapsed calendar day {} after a world-time change.",
+                Math.max(0L, previousElapsedDays));
+    }
+
+    public static void clearAll() {
+        STATES.clear();
     }
 
     /** Returns the configured normal world-time speed at an explicit time of day. */
@@ -210,6 +258,12 @@ public final class DayCycleHandler {
     }
 
     private static final class State {
+        long dayOffsetDays;
+
+        State(long dayOffsetDays) {
+            this.dayOffsetDays = DayCycleWorldConfig.sanitizeElapsedDayOffsetDays(dayOffsetDays);
+        }
+
         double timeDecimalAccumulator = 0.0;
         long lastKnownTime = -1L;
         String cachedSubSeason;
