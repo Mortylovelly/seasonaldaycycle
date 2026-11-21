@@ -10,7 +10,7 @@ import net.minecraft.server.world.ServerWorld;
  * file, keeping it aligned with the world's saved time-of-day.
  */
 public final class VertexCalendarState extends PersistentState {
-    private static final String SAVE_ID = "vertex_calendar";
+    private static final String SAVE_ID = "seasonaldaycycle_calendar";
     private static final String KEY_VERSION = "version";
     private static final String KEY_DAY_OFFSET = "dayOffsetDays";
     private static final int VERSION = 1;
