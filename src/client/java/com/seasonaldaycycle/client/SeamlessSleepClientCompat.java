@@ -32,14 +32,9 @@ public final class SeamlessSleepClientCompat {
         if (state == null) return false;
 
         try {
-            if (!Boolean.TRUE.equals(animationIsActive.invoke(state))) return false;
-            if (replayCompatModeField.getBoolean(state)) return true;
-
-            long elapsedMillis = Math.max(0L,
-                    System.currentTimeMillis() - animationStartMillisField.getLong(state));
-            int durationTicks = Math.max(1, animationDurationTicksField.getInt(state));
-            long skipDurationMillis = Math.max(0, durationTicks - WAKE_SETTLE_TICKS) * 50L;
-            return elapsedMillis < skipDurationMillis;
+            // The client must follow Seamless Sleep's world clock through the
+            // complete normal-speed resting phase, not just the accelerated skip.
+            return Boolean.TRUE.equals(animationIsActive.invoke(state));
         } catch (ReflectiveOperationException | RuntimeException exception) {
             logFailureOnce(exception);
             return false;
