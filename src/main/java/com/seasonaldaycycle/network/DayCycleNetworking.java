@@ -9,6 +9,7 @@ import net.minecraft.server.MinecraftServer;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.world.ServerWorld;
 
 public final class DayCycleNetworking {
     private DayCycleNetworking() {}
@@ -28,7 +29,8 @@ public final class DayCycleNetworking {
 
         ServerPlayNetworking.registerGlobalReceiver(SetSeasonPayload.TYPE, (payload, player, responseSender) -> {
             if (player.getServer() == null) return;
-            if (!canEdit(player)) {
+            if (!canEdit(player)
+                    || player.getServerWorld().getRegistryKey() != net.minecraft.world.World.OVERWORLD) {
                 sendState(player);
                 return;
             }
@@ -57,7 +59,25 @@ public final class DayCycleNetworking {
             });
         });
 
-        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> sendState(handler.player));
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
+            sendState(handler.player);
+            sendDayOffset(handler.player, true);
+        });
+    }
+
+    /** Sends the current calendar offset to every player on this server. */
+    public static void syncDayOffset(ServerWorld world, long offsetDays) {
+        if (world == null || world.getServer() == null) return;
+        long safeOffset = DayCycleWorldConfig.sanitizeElapsedDayOffsetDays(offsetDays);
+        for (ServerPlayerEntity player : world.getServer().getPlayerManager().getPlayerList()) {
+            ServerPlayNetworking.send(player, new CalendarProgressSyncPayload(safeOffset, false));
+        }
+    }
+
+    private static void sendDayOffset(ServerPlayerEntity player, boolean initialSync) {
+        if (player == null || player.getServer() == null) return;
+        long offset = DayCycleWorldConfig.getElapsedDayOffsetDays(player.getServerWorld());
+        ServerPlayNetworking.send(player, new CalendarProgressSyncPayload(offset, initialSync));
     }
 
     private static boolean canEdit(ServerPlayerEntity player) {
