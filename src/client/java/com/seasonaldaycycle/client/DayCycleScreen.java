@@ -838,9 +838,11 @@ public final class DayCycleScreen {
             int sliderX = panelX + 18;
             int sliderY = panelY + HEADER_HEIGHT + 30 + 52;
             if (inside(x, y, sliderX - 8, sliderY - 8, SLIDER_WIDTH + 16, 24)) {
-                draggingSlider = true;
-                updateSliderFromMouse(x);
-                playUiSound(1.0f);
+                if (serverSynced && serverCanEdit) {
+                    draggingSlider = true;
+                    updateSliderFromMouse(x);
+                    playUiSound(1.0f);
+                }
                 return true;
             }
 
@@ -854,9 +856,11 @@ public final class DayCycleScreen {
                 int buttonX = panelX + 18 + column * (buttonWidth + gap);
                 int buttonY = presetY + row * (BUTTON_HEIGHT + 3);
                 if (inside(x, y, buttonX, buttonY, buttonWidth, BUTTON_HEIGHT)) {
-                    cycleLengthTicks = ModConfig.sanitizeCycleLengthTicks(PRESET_TICKS[i]);
-                    playUiSound(1.05f);
-                    commitCurrentValue();
+                    if (serverSynced && serverCanEdit) {
+                        cycleLengthTicks = ModConfig.sanitizeCycleLengthTicks(PRESET_TICKS[i]);
+                        playUiSound(1.05f);
+                        commitCurrentValue();
+                    }
                     return true;
                 }
             }
