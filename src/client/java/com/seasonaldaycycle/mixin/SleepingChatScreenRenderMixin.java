@@ -6,16 +6,12 @@ import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.SleepingChatScreen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(SleepingChatScreen.class)
 public abstract class SleepingChatScreenRenderMixin {
-    @Shadow
-    private ButtonWidget stopSleepingButton;
-
     @Inject(method = "render", at = @At("TAIL"))
     private void seasonaldaycycle$renderSleepClock(
             DrawContext context, int mouseX, int mouseY, float delta, CallbackInfo ci) {
@@ -24,9 +20,9 @@ public abstract class SleepingChatScreenRenderMixin {
 
         int width = client.getWindow().getScaledWidth();
         int height = client.getWindow().getScaledHeight();
-        int buttonTop = this.stopSleepingButton == null
-                ? height - 40
-                : this.stopSleepingButton.getY();
+        ButtonWidget stopButton =
+                ((SleepingChatScreenAccessor) (Object) this).seasonaldaycycle$getStopSleepingButton();
+        int buttonTop = stopButton == null ? height - 40 : stopButton.getY();
 
         SleepClockHudOverlay.render(context, width, height, delta, buttonTop);
     }
