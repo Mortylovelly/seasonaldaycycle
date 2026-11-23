@@ -5,6 +5,8 @@ Seasonal Day Cycle for **Minecraft 1.20.1 + Fabric + Java 17**.
 ## Features
 
 - Configurable duration of a complete day/night cycle, from 1 second to 24 hours.
+- New worlds default to a **2-hour** complete day/night cycle.
+- When Serene Seasons is installed, new worlds start in **mid-summer** (MID_SUMMER); already initialized worlds keep their saved season.
 - Per-world cycle length, stored in the world save and synchronized by the server.
 - Seasonal day/night proportions for spring, summer, autumn and winter.
 - Optional Serene Seasons integration (9.1.0+): the season page reads the current season and sub-season from its public API.

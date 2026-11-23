@@ -26,7 +26,7 @@ public final class DayCycleWorldConfig {
     private static final String FILE_NAME = ".seasonaldaycycle.json";
     private static final String BACKUP_SUFFIX = ".bak";
     private static final String TEMP_SUFFIX = ".tmp";
-    private static final int CONFIG_VERSION = 2;
+    private static final int CONFIG_VERSION = 3;
     private static final long MAX_DAY_OFFSET_DAYS = 1_000_000_000_000L;
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Map<ServerWorld, Config> CACHE = new WeakHashMap<>();
@@ -41,6 +41,24 @@ public final class DayCycleWorldConfig {
         if (world == null) return 0L;
         Config config = getConfig(world);
         return VertexCalendarState.get(world, config.elapsedDayOffsetDays).getDayOffsetDays();
+    }
+
+    /**
+     * Applies the new-world default only once. Existing version-2 saves are migrated
+     * as already initialized, so their current Serene Seasons season is preserved.
+     */
+    public static void applyDefaultSeasonIfNeeded(ServerWorld world) {
+        if (world == null || !SereneSeasonsCompat.isLoaded()) return;
+
+        Config config = getConfig(world);
+        if (config.defaultSeasonApplied) return;
+
+        // 1 = summer; SereneSeasonsCompat selects its middle sub-season.
+        if (SereneSeasonsCompat.setSeason(world, 1)) {
+            config.defaultSeasonApplied = true;
+            save(world.getServer(), config);
+            SeasonalDayCycle.LOGGER.info("[Vertex] Initialized new world season to MID_SUMMER.");
+        }
     }
 
     public static void setCycleLengthTicks(ServerWorld world, long ticks) {
@@ -121,6 +139,9 @@ public final class DayCycleWorldConfig {
         try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
             Config config = GSON.fromJson(reader, Config.class);
             if (config == null || config.cycleLengthTicks <= 0L) return null;
+            if (config.version < CONFIG_VERSION) {
+                config.defaultSeasonApplied = true;
+            }
             return config;
         } catch (Exception exception) {
             SeasonalDayCycle.LOGGER.warn("[Vertex] Could not read world settings from {}.", path, exception);
@@ -185,6 +206,7 @@ public final class DayCycleWorldConfig {
         int version = CONFIG_VERSION;
         long cycleLengthTicks = ModConfig.DEFAULT_CYCLE_LENGTH_TICKS;
         long elapsedDayOffsetDays = 0L;
+        boolean defaultSeasonApplied = false;
 
         void sanitize() {
             if (cycleLengthTicks <= 0L) {

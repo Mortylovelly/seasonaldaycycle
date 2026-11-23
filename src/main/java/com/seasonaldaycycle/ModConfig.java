@@ -10,12 +10,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 public final class ModConfig {
-    public static final long DEFAULT_CYCLE_LENGTH_TICKS = 72000L;
+    public static final long DEFAULT_CYCLE_LENGTH_TICKS = 144000L;
     public static final long MIN_CYCLE_LENGTH_TICKS = 20L;
     public static final long MAX_CYCLE_LENGTH_TICKS = 1_728_000L;
     public static final long CYCLE_LENGTH_STEP_TICKS = 20L;
 
-    private static final double DEFAULT_TOTAL_BASE_TICKS = 72000.0;
+    private static final double DEFAULT_TOTAL_BASE_TICKS = 144000.0;
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("seasonaldaycycle.json");
     private static Config values = new Config();

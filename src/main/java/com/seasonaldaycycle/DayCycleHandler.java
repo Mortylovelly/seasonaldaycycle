@@ -22,6 +22,10 @@ public final class DayCycleHandler {
         if (!level.getGameRules().getBoolean(GameRules.DO_DAYLIGHT_CYCLE)) return;
 
         State state = getState(level);
+        if (!state.defaultSeasonInitializationChecked) {
+            state.defaultSeasonInitializationChecked = true;
+            DayCycleWorldConfig.applyDefaultSeasonIfNeeded(level);
+        }
         long currentTime = level.getTimeOfDay();
 
         if (!state.seasonInitialized || ++state.seasonRefreshTicks >= 20) {
@@ -287,6 +291,7 @@ public final class DayCycleHandler {
         String cachedSubSeason;
         int seasonRefreshTicks;
         boolean seasonInitialized;
+        boolean defaultSeasonInitializationChecked;
         boolean sleepAnimationWasActive;
 
         boolean speedInitialized;
